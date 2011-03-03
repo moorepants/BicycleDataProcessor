@@ -1,8 +1,16 @@
 addpath('hdf5matlab')
 
+<<<<<<< HEAD
 load(['..' filesep '..' filesep 'BicycleDAQ' filesep 'data' filesep '00157.mat'])
 
 hdf5save('00157.h5', ...
+=======
+todata = ['..' filesep '..' filesep 'BicycleDAQ' filesep 'data']
+
+load([todata filesep '00170.mat'])
+
+hdf5save([todata filesep 'h5' filesep '00170.h5'], ...
+>>>>>>> master
          'InputPairs', 'InputPairs', ...
          'NIData', 'NIData', ...
          'VNavCols', 'VNavCols', ...
