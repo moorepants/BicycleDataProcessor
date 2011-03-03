@@ -16,11 +16,30 @@ def create_database():
         # add all of the column headings from par, NICols and VNavCols
         a = 1.
 
-def parse_vnav_string(vnstr):
-    '''Gets the good info from a VNav string'''
-    vnstr = re.sub('$(.*)\*', '\1', vnstr)
+def parse_vnav_string(vnstr, remove=0):
+    '''Gets the good info from a VNav string
+
+    Parameters
+    ----------
+    vnstr : string
+        A string from the VectorNav serial output.
+    remove : int
+        Specifies how many values to remove from the beginning of the output
+        list. Useful for removing VNWRG, etc.
+
+    Returns
+    -------
+    vnlist : list
+        A list of each element in the VectorNav string.
+        ['VNWRG', '26', ..., ..., ...]
+
+    '''
+    # get rid of the $ and the *checksum
+    vnstr = re.sub('\$(.*)\*.*', r'\1', vnstr)
+    # make it a list
     vnlist = vnstr.split(',')
-    return vnlist
+    # return the last values with regards to remove
+    return vnlist[remove:]
 
 def get_run_data(pathtofile):
     '''Returns data from the run h5 files using pytables and formats it better
@@ -68,7 +87,18 @@ def get_run_data(pathtofile):
             else:
                 rundata['par'][col.name] = int(col.read()[0])
         except:
-            rundata['par'][col.name] = str(col.read()[0])
+            pstr = str(col.read()[0])
+            rundata['par'][col.name] = pstr
+            if pstr[0] == '$':
+                parsed = parse_vnav_string(pstr, remove=2)
+                if len(parsed) == 1:
+                    try:
+                        parsed = int(parsed[0])
+                    except:
+                        parsed = parsed[0]
+                else:
+                    parsed = np.array([float(x) for x in parsed])
+                rundata['par'][col.name] = parsed
 
     # get the VNavDataText
     rundata['VNavDataText'] = [str(x) for x in runfile.root.VNavDataText.read()]
