@@ -18,6 +18,7 @@ def get_run_data(pathtofile):
 
     '''
 
+    # open the file
     runfile = tab.openFile(pathtofile)
 
     # intialize a dictionary for storage
@@ -35,13 +36,15 @@ def get_run_data(pathtofile):
 
     rundata['NICols'].sort(key=lambda x: x[1])
 
+    rundata['NICols'] = [x[0] for x in rundata['NICols']]
+
     # put the parameters into a dictionary
     rundata['par'] = {}
     for col in runfile.root.par:
         rundata['par'][col.name] = col.read()[0]
 
     # get the VNavDataText
-    rundata['VNavDataText'] = runfile.root.VNavDataText.read()
+    rundata['VNavDataText'] = list(runfile.root.VNavDataText.read())
 
     # close the file
     runfile.close()
