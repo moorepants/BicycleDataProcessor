@@ -1,7 +1,7 @@
 import tables
-import numpy
 import os
 
-def matfile_test():
-    run = tables.file.openFile(os.path.join('matlab', '00170.h5'))
+def importmat(filename):
+    run = tables.file.openFile(os.path.join('matlab', filename))
     return run
+
