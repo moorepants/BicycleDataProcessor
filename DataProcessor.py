@@ -2,11 +2,6 @@ import tables as tab
 import numpy as np
 import os
 
-def matfile_test():
-    toh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
-    run = tab.openFile(os.path.join(toh5, '00170.h5'))
-    return run
-
 def get_run_data(pathtofile):
     '''Returns data from the run h5 files using pytables and formats it better
     for python.
