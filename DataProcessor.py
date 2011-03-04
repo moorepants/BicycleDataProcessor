@@ -3,6 +3,33 @@ import numpy as np
 import os
 import re
 
+def fill_table(datafile):
+    '''Adds all the data to the table'''
+
+    # load the files from the data/h5 directory
+    pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
+    files = sorted(os.listdir(pathtoh5))
+    # open a new hdf5 file for appending
+    data = tab.openFile(datafile, mode='a')
+    # get the table
+    rawtable = data.root.rawdata.rawdatatable
+    # get the row
+    row = rawtable.row
+    # fill the rows with data
+    for run in files:
+        print run
+        rundata = get_run_data(os.path.join(pathtoh5, run))
+        for par, val in rundata['par'].items():
+            row[par] = val
+        #for i, col in enumerate(rundata['NICols']):
+            #print row[col].shape, rundata['NIData'][i].shape
+            #row[col] = rundata['NIData'][i]
+        #for i, col in enumerate(rundata['VNavCols']):
+            #row[col] = rundata['VNavData'][i]
+        row.append()
+    rawtable.flush()
+    data.close()
+
 def create_database():
     '''Creates an HDF5 file for data collected from the instrumented bicycle'''
 
@@ -19,7 +46,7 @@ def create_database():
     rgroup = data.createGroup('/', 'rawdata', 'Raw Data')
     # add the data table to this group
     rtable = data.createTable(rgroup, 'rawdatatable', RawRun, 'Primary Data Table')
-    print data
+    rtable.flush()
     data.close()
 
 def create_raw_run_class(rundata):
@@ -41,9 +68,9 @@ def create_raw_run_class(rundata):
     class RawRun(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(rundata['NICols']):
-            exec(col + " = tab.Float32Col(shape=(60000, ), pos=i)")
+            exec(col + " = tab.Float32Col(shape=(6000, ), pos=i)")
         for k, col in enumerate(rundata['VNavCols']):
-            exec(col + " = tab.Float32Col(shape=(60000, ), pos=i+1+k)")
+            exec(col + " = tab.Float32Col(shape=(6000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(rundata['par'].items()):
             pos = k+1+i
             if isinstance(val, type(1)):
@@ -118,6 +145,7 @@ def get_run_data(pathtofile):
         rundata['VNavCols'][i] = col[:5]
     rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
     rundata['NICols'] = []
+    # make a list of NI columns from the InputPair structure from matlab
     for col in runfile.root.InputPairs:
         rundata['NICols'].append((str(col.name), int(col.read()[0])))
 
