@@ -14,7 +14,13 @@ def create_database():
     # set up the table description
     class Run(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
-        a = 1.
+        for i, col in enumerate(rundata['NICols']):
+            exec(col + " = tab.Float32Col(shape=(60000, ), pos=i)")
+        del(i, col)
+        #for col in rundata['VNavCols']:
+            #exec(col + ' = tab.StringCol(20)')
+
+    return Run
 
 def parse_vnav_string(vnstr, remove=0):
     '''Gets the good info from a VNav string
