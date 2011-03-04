@@ -147,26 +147,6 @@ def get_run_data(pathtofile):
     # intialize a dictionary for storage
     rundata = {}
 
-    # first let's get the NIData and VNavData
-    rundata['NIData'] = runfile.root.NIData.read()
-    rundata['VNavData'] = runfile.root.VNavData.read()
-
-    # now create two lists that give the column headings for the two data sets
-    rundata['VNavCols'] = [str(x) for x in runfile.root.VNavCols.read()]
-    # hack because the Mags may come with hex shit at the end like \x03
-    for i, col in enumerate(rundata['VNavCols'][:3]):
-        rundata['VNavCols'][i] = col[:5]
-    rundata['VNavCols'][-1] = rundata['VNavCols'][-1][:11]
-    rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
-    rundata['NICols'] = []
-    # make a list of NI columns from the InputPair structure from matlab
-    for col in runfile.root.InputPairs:
-        rundata['NICols'].append((str(col.name), int(col.read()[0])))
-
-    rundata['NICols'].sort(key=lambda x: x[1])
-
-    rundata['NICols'] = [x[0] for x in rundata['NICols']]
-
     # put the parameters into a dictionary
     rundata['par'] = {}
     for col in runfile.root.par:
@@ -189,6 +169,29 @@ def get_run_data(pathtofile):
                 else:
                     parsed = np.array([float(x) for x in parsed])
                 rundata['par'][col.name] = parsed
+
+    # get the NIData and VNavData
+    rundata['NIData'] = runfile.root.NIData.read()
+    rundata['VNavData'] = runfile.root.VNavData.read()
+
+    # make the array into a list of python strings
+    rundata['VNavCols'] = [str(x) for x in runfile.root.VNavCols.read()]
+    # hack because the strings may come with hex shit at the end like \x03
+    #if rundata['par']['ADOT'] = 253:
+        #strlengths = [4, 4, 4, 13, 13, 13, 12, 12, 12, 11]
+    #elif:
+        #strlengths = [16, 16, 16, 
+    rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
+    #for i, col in enumerate(rundata['VNavCols']):
+        #rundata['VNavCols'][i] = col[:strlengths[i]]
+    # make a list of NI columns from the InputPair structure from matlab
+    rundata['NICols'] = []
+    for col in runfile.root.InputPairs:
+        rundata['NICols'].append((str(col.name), int(col.read()[0])))
+
+    rundata['NICols'].sort(key=lambda x: x[1])
+
+    rundata['NICols'] = [x[0] for x in rundata['NICols']]
 
     # get the VNavDataText
     rundata['VNavDataText'] = [str(x) for x in runfile.root.VNavDataText.read()]
