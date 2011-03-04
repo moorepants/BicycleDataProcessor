@@ -3,6 +3,19 @@ import numpy as np
 import os
 import re
 
+def pad_vector(vector, length):
+    '''Returns a vector with nan's padded on to the end.
+
+    Parameters
+    ----------
+    vector : numpy array, shape(n, )
+        The vector that needs some padding.
+    length : int
+        The desired length after the padding.
+    '''
+    nans = np.ones(length-len(vector))*np.nan
+    return np.append(vector, nans)
+
 def fill_table(datafile):
     '''Adds all the data to the table'''
 
@@ -21,11 +34,11 @@ def fill_table(datafile):
         rundata = get_run_data(os.path.join(pathtoh5, run))
         for par, val in rundata['par'].items():
             row[par] = val
-        #for i, col in enumerate(rundata['NICols']):
+        for i, col in enumerate(rundata['NICols']):
             #print row[col].shape, rundata['NIData'][i].shape
-            #row[col] = rundata['NIData'][i]
-        #for i, col in enumerate(rundata['VNavCols']):
-            #row[col] = rundata['VNavData'][i]
+            row[col] = pad_vector(rundata['NIData'][i], 48000)
+        for i, col in enumerate(rundata['VNavCols']):
+            row[col] = pad_vector(rundata['VNavData'][i], 48000)
         row.append()
     rawtable.flush()
     data.close()
@@ -68,9 +81,9 @@ def create_raw_run_class(rundata):
     class RawRun(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(rundata['NICols']):
-            exec(col + " = tab.Float32Col(shape=(6000, ), pos=i)")
+            exec(col + " = tab.Float32Col(shape=(48000, ), pos=i)")
         for k, col in enumerate(rundata['VNavCols']):
-            exec(col + " = tab.Float32Col(shape=(6000, ), pos=i+1+k)")
+            exec(col + " = tab.Float32Col(shape=(48000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(rundata['par'].items()):
             pos = k+1+i
             if isinstance(val, type(1)):
@@ -143,6 +156,7 @@ def get_run_data(pathtofile):
     # hack because the Mags may come with hex shit at the end like \x03
     for i, col in enumerate(rundata['VNavCols'][:3]):
         rundata['VNavCols'][i] = col[:5]
+    rundata['VNavCols'][-1] = rundata['VNavCols'][-1][:11]
     rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
     rundata['NICols'] = []
     # make a list of NI columns from the InputPair structure from matlab
