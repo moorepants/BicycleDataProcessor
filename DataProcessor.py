@@ -47,4 +47,3 @@ def get_run_data(pathtofile):
     runfile.close()
 
     return rundata
->>>>>>> master
