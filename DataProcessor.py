@@ -8,19 +8,57 @@ def create_database():
 
     # load the latest file in the data/h5 directory
     pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
-    files = os.listdir(pathtoh5)
-    files.sort()
+    files = sorted(os.listdir(pathtoh5))
     rundata = get_run_data(os.path.join(pathtoh5, files[-1]))
+    # generate the table description class
+    RawRun = create_raw_run_class(rundata)
+    # open a new hdf5 file for writing
+    data = tab.openFile('InstrumentedBicycleData.h5', mode='w',
+                               title='Instrumented Bicycle Data')
+    # create a group for the raw data
+    rgroup = data.createGroup('/', 'rawdata', 'Raw Data')
+    # add the data table to this group
+    rtable = data.createTable(rgroup, 'rawdatatable', RawRun, 'Primary Data Table')
+    print data
+    data.close()
+
+def create_raw_run_class(rundata):
+    '''Generates a class that is used for the table description for raw data
+    for each run.
+
+    Parameters
+    ----------
+    rundata : dict
+        Contains the python dictionary of a particular run.
+
+    Returns
+    -------
+    Run : class
+        Table description class for pytables with columns defined.
+
+    '''
     # set up the table description
-    class Run(tab.IsDescription):
+    class RawRun(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(rundata['NICols']):
             exec(col + " = tab.Float32Col(shape=(60000, ), pos=i)")
-        del(i, col)
-        #for col in rundata['VNavCols']:
-            #exec(col + ' = tab.StringCol(20)')
+        for k, col in enumerate(rundata['VNavCols']):
+            exec(col + " = tab.Float32Col(shape=(60000, ), pos=i+1+k)")
+        for i, (key, val) in enumerate(rundata['par'].items()):
+            pos = k+1+i
+            if isinstance(val, type(1)):
+                exec(key + " = tab.Int64Col(pos=pos)")
+            elif isinstance(val, type('')):
+                exec(key + " = tab.StringCol(itemsize=50, pos=pos)")
+            elif isinstance(val, type(1.)):
+                exec(key + " = tab.Float64Col(pos=pos)")
+            elif isinstance(val, type(np.ones(1))):
+                exec(key + " = tab.Float64Col(shape=(" + str(len(val)) + ", ), pos=pos)")
 
-    return Run
+        # get rid of these intermediate variables
+        del(i, k, col, key, pos, val)
+
+    return RawRun
 
 def parse_vnav_string(vnstr, remove=0):
     '''Gets the good info from a VNav string
@@ -75,6 +113,10 @@ def get_run_data(pathtofile):
 
     # now create two lists that give the column headings for the two data sets
     rundata['VNavCols'] = [str(x) for x in runfile.root.VNavCols.read()]
+    # hack because the Mags may come with hex shit at the end like \x03
+    for i, col in enumerate(rundata['VNavCols'][:3]):
+        rundata['VNavCols'][i] = col[:5]
+    rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
     rundata['NICols'] = []
     for col in runfile.root.InputPairs:
         rundata['NICols'].append((str(col.name), int(col.read()[0])))
