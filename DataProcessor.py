@@ -19,10 +19,10 @@ def pad_vector(vector, length):
 def fill_table(datafile):
     '''Adds all the data to the table'''
 
-    # load the files from the data/h5 directory
+    # load the files from the ../BicycleDAQ/data/h5 directory
     pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
     files = sorted(os.listdir(pathtoh5))
-    # open a new hdf5 file for appending
+    # open an hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
     # get the table
     rawtable = data.root.rawdata.rawdatatable
@@ -36,9 +36,9 @@ def fill_table(datafile):
             row[par] = val
         for i, col in enumerate(rundata['NICols']):
             #print row[col].shape, rundata['NIData'][i].shape
-            row[col] = pad_vector(rundata['NIData'][i], 48000)
+            row[col] = pad_vector(rundata['NIData'][i], 12000)
         for i, col in enumerate(rundata['VNavCols']):
-            row[col] = pad_vector(rundata['VNavData'][i], 48000)
+            row[col] = pad_vector(rundata['VNavData'][i], 12000)
         row.append()
     rawtable.flush()
     data.close()
@@ -46,12 +46,19 @@ def fill_table(datafile):
 def create_database():
     '''Creates an HDF5 file for data collected from the instrumented bicycle'''
 
-    # load the latest file in the data/h5 directory
+    # load the latest file in the ../BicycleDAQ/data/h5 directory
     pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
     files = sorted(os.listdir(pathtoh5))
-    rundata = get_run_data(os.path.join(pathtoh5, files[-1]))
+    filteredrun = get_run_data(os.path.join(pathtoh5, files[0]))
+    unfilteredrun = get_run_data(os.path.join(pathtoh5, files[-1]))
+    if filteredrun['par']['ADOT'] is not 14:
+        print 'Run %d is not a filtered run, choose again' %
+        filteredrun['par']['RunID']
+    if unfilteredrun['par']['ADOT'] is not 253:
+        print 'Run %d is not a unfiltered run, choose again' %
+        unfilteredrun['par']['RunID']
     # generate the table description class
-    RawRun = create_raw_run_class(rundata)
+    RawRun = create_raw_run_class(filteredrun, unfilteredrun)
     # open a new hdf5 file for writing
     data = tab.openFile('InstrumentedBicycleData.h5', mode='w',
                                title='Instrumented Bicycle Data')
@@ -62,7 +69,7 @@ def create_database():
     rtable.flush()
     data.close()
 
-def create_raw_run_class(rundata):
+def create_raw_run_class(filteredrun, unfilteredrun):
     '''Generates a class that is used for the table description for raw data
     for each run.
 
@@ -77,14 +84,18 @@ def create_raw_run_class(rundata):
         Table description class for pytables with columns defined.
 
     '''
+
+    # combine the VNavCols from unfiltered and filtered
+    
+
     # set up the table description
     class RawRun(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
-        for i, col in enumerate(rundata['NICols']):
-            exec(col + " = tab.Float32Col(shape=(48000, ), pos=i)")
-        for k, col in enumerate(rundata['VNavCols']):
-            exec(col + " = tab.Float32Col(shape=(48000, ), pos=i+1+k)")
-        for i, (key, val) in enumerate(rundata['par'].items()):
+        for i, col in enumerate(unfilteredrun['NICols']):
+            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
+        for k, col in enumerate(unfilteredrun['VNavCols']):
+            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
+        for i, (key, val) in enumerate(unfilteredrun['par'].items()):
             pos = k+1+i
             if isinstance(val, type(1)):
                 exec(key + " = tab.Int64Col(pos=pos)")
@@ -175,15 +186,11 @@ def get_run_data(pathtofile):
     rundata['VNavData'] = runfile.root.VNavData.read()
 
     # make the array into a list of python strings
-    rundata['VNavCols'] = [str(x) for x in runfile.root.VNavCols.read()]
-    # hack because the strings may come with hex shit at the end like \x03
-    #if rundata['par']['ADOT'] = 253:
-        #strlengths = [4, 4, 4, 13, 13, 13, 12, 12, 12, 11]
-    #elif:
-        #strlengths = [16, 16, 16, 
-    rundata['VNavCols'] = [x.replace(' ', '') for x in rundata['VNavCols']]
-    #for i, col in enumerate(rundata['VNavCols']):
-        #rundata['VNavCols'][i] = col[:strlengths[i]]
+    columns = [str(x) for x in runfile.root.VNavCols.read()]
+    # gets rid of unescaped control characters
+    columns = [re.sub(r'[^ -~].*', '', x) for x in columns]
+    # gets rid of white space
+    rundata['VNavCols'] = [x.replace(' ', '') for x in columns]
     # make a list of NI columns from the InputPair structure from matlab
     rundata['NICols'] = []
     for col in runfile.root.InputPairs:
