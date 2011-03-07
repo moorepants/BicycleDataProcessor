@@ -2,6 +2,104 @@ import os
 import re
 import tables as tab
 import numpy as np
+import scipy as sp
+from scipy.optimize import fmin_bfgs
+
+class Run():
+    '''
+    The fundamental class for a run.
+
+    '''
+    def __init__(self, runid, datafile):
+        '''Loads all parameters if available otherwise it generates them.
+
+        Parameters
+        ----------
+        runid : int or string
+            The run id: 5 or '00005'.
+        datafile : pytable object of an hdf5 file
+            This file must contain the run data table and the calibration data
+            table.
+
+        '''
+
+        # get the data table
+        datatable = datafile.root.data.datatable
+
+        self.d = {}
+
+        for col in datatable.colnames:
+            coldata = datatable[int(runid)][col]
+            try:
+                if len(coldata) == 12000:
+                    numsamp = datatable[int(runid)]['NINumSamples']
+                    coldata = unsize_vector(coldata, numsamp)
+            except:
+                pass
+            self.d[col] = coldata
+
+
+def sync_error(tau,s1,s2,t):
+    '''
+    Returns the error between two signals.
+
+    Parameters
+    ----------
+    tau :
+    s1 :
+    s2 :
+    t :
+
+    Returns
+    -------
+    e :
+
+    '''
+    N = t.shape[0]
+    t1_interp = np.linspace(np.min(t) + np.abs(tau),
+                            np.max(t) - np.abs(tau),
+                            N)
+    t2_interp = t1_interp - tau
+    s1_interp = sp.interp(t1_interp, t, s1);
+    s2_interp = sp.interp(t2_interp,
+                          t[~np.isnan(s2)],
+                          s2[~np.isnan(s2)]);
+    e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
+    return e
+
+def find_timeshift(s1, s2, Fs):
+    '''
+    Returns the timeshift (tau) of the VectorNav (VN) data relative to the
+    National Instruments (NI) data based on the first 20% of the data.
+
+    Parameters
+    ----------
+    s1 : ndarray, shape(n, )
+        Vertical acceleration data of the NI accelerometer
+    s2 : ndarray, shape(n, )
+        Vertical acceleration data of the VN accelerometer
+
+    Returns
+    -------
+    tau : array
+        Timeshift relative to the NI signals
+
+    '''
+
+    N = s1.shape[0]
+    t = np.arange(0, N)/Fs
+
+    # Error Landscape
+    tau_range = np.linspace(-1, 1, 201)
+    e = np.zeros(tau_range.shape)
+    for ran in tau_range:
+        e[i] = sync_error(ran, s1, s2, t)
+
+    # Find initial condition from landscape and optimize!
+    tau0 = tau_range[np.argmin(e)]
+    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
+
+    return tau
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
@@ -76,9 +174,9 @@ def fill_table(datafile):
     # open an hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
     # get the table
-    rawtable = data.root.rawdata.rawdatatable
+    datatable = data.root.data.datatable
     # get the row
-    row = rawtable.row
+    row = datatable.row
     # fill the rows with data
     for run in files:
         print 'Adding run: %s' % run
@@ -94,7 +192,7 @@ def fill_table(datafile):
         for i, col in enumerate(rundata['VNavCols']):
             row[col] = size_vector(rundata['VNavData'][i], 12000)
         row.append()
-    rawtable.flush()
+    datatable.flush()
     data.close()
 
 def create_database():
@@ -112,18 +210,18 @@ def create_database():
         print('Run %d is not a unfiltered run, choose again' %
               unfilteredrun['par']['RunID'])
     # generate the table description class
-    RawRun = create_raw_run_class(filteredrun, unfilteredrun)
+    RunTable = create_run_table_class(filteredrun, unfilteredrun)
     # open a new hdf5 file for writing
     data = tab.openFile('InstrumentedBicycleData.h5', mode='w',
-                               title='Instrumented Bicycle Data')
+                        title='Instrumented Bicycle Data')
     # create a group for the raw data
-    rgroup = data.createGroup('/', 'rawdata', 'Raw Data')
+    rgroup = data.createGroup('/', 'data', 'Data')
     # add the data table to this group
-    rtable = data.createTable(rgroup, 'rawdatatable', RawRun, 'Primary Data Table')
+    rtable = data.createTable(rgroup, 'datatable', RunTable, 'Primary Data Table')
     rtable.flush()
     data.close()
 
-def create_raw_run_class(filteredrun, unfilteredrun):
+def create_run_table_class(filteredrun, unfilteredrun):
     '''Generates a class that is used for the table description for raw data
     for each run.
 
@@ -143,7 +241,7 @@ def create_raw_run_class(filteredrun, unfilteredrun):
     VNavCols = set(filteredrun['VNavCols'] + unfilteredrun['VNavCols'])
 
     # set up the table description
-    class RawRun(tab.IsDescription):
+    class RunTable(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(unfilteredrun['NICols']):
             exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
@@ -160,10 +258,18 @@ def create_raw_run_class(filteredrun, unfilteredrun):
             elif isinstance(val, type(np.ones(1))):
                 exec(key + " = tab.Float64Col(shape=(" + str(len(val)) + ", ), pos=pos)")
 
-        # get rid intermediate variables so they are not stored in the class
-        del(i, k, col, key, pos, val)
+        # add the columns for the processed data
+        processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
+                         'RearWheelRate', 'SteerTorque', 'YawRate',
+                         'PitchRate', 'FrameAccelerationX',
+                         'FrameAccelerationY', 'FrameAccelerationZ', 'tau']
+        for k, col in enumerate(processedCols):
+            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
 
-    return RawRun
+        # get rid intermediate variables so they are not stored in the class
+        del(i, k, col, key, pos, val, processedCols)
+
+    return RunTable
 
 def parse_vnav_string(vnstr, remove=0):
     '''Gets the good info from a VNav string
