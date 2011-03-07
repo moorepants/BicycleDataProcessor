@@ -3,14 +3,14 @@ import numpy as np
 import os
 import re
 
-def unpad_vector(vector, samplenum):
+def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
 
     Parameters
     ----------
     vector : numpy array, shape(n, )
         A vector that may or may not have nan padding and the end of the data.
-    samplenum : int
+    m : int
         Number of valid values in the vector.
 
     Returns
@@ -19,20 +19,46 @@ def unpad_vector(vector, samplenum):
         The vector with the padding removed. m = samplenum
 
     '''
-    return vector[:samplenum]
+    # this case removes the nan padding
+    if m < len(vector):
+        oldvec = vector[:m]
+    elif m > len(vector):
+        oldvec = vector
+        print("This one is actually longer, you may want to get the complete
+              data, or improve this function so it does that.")
+    elif m == len(vector):
+        oldvec = vector
+    else:
+        print "Something's wrong here"
+    return oldvec
 
-def pad_vector(vector, length):
-    '''Returns a vector with nan's padded on to the end.
+def size_vector(vector, m):
+    '''Returns a vector with nan's padded on to the end or a slice of the
+    vector if length is less than the length of the vector.
 
     Parameters
     ----------
     vector : numpy array, shape(n, )
-        The vector that needs some padding.
-    length : int
-        The desired length after the padding.
+        The vector that needs sizing.
+    m : int
+        The desired length after the sizing.
+
+    Returns
+    -------
+    newvec : numpy array, shape(m, )
     '''
-    nans = np.ones(length-len(vector))*np.nan
-    return np.append(vector, nans)
+    nsamp = len(vector)
+    # if the desired length is larger then pad witn nan's
+    if m > nsamp:
+        nans = np.ones(m-nsamp)*np.nan
+        newvec = np.append(vector, nans)
+    elif m < nsamp:
+        newvec = vector[:m]
+    elif m == nsamp:
+        newvec = vector
+    else:
+        print "This didn't work"
+    return newvec
 
 def fill_table(datafile):
     '''Adds all the data from the hdf5 files in the h5 directory to the table.
@@ -50,7 +76,6 @@ def fill_table(datafile):
     data = tab.openFile(datafile, mode='a')
     # get the table
     rawtable = data.root.rawdata.rawdatatable
-    print rawtable.colnames
     # get the row
     row = rawtable.row
     # fill the rows with data
@@ -59,17 +84,14 @@ def fill_table(datafile):
         rundata = get_run_data(os.path.join(pathtoh5, run))
         for par, val in rundata['par'].items():
             row[par] = val
-        # for the data don't add it if it is longer than 12000 samples
+        # only take the first 12000 samples for all runs
         for i, col in enumerate(rundata['NICols']):
-            try:
-                row[col] = pad_vector(rundata['NIData'][i], 12000)
+            try: # there are no roll pot measurements
+                row[col] = size_vector(rundata['NIData'][i], 12000)
             except:
-                pass
+                print "There is no %s measurement" % col
         for i, col in enumerate(rundata['VNavCols']):
-            try:
-                row[col] = pad_vector(rundata['VNavData'][i], 12000)
-            except:
-                pass
+            row[col] = size_vector(rundata['VNavData'][i], 12000)
         row.append()
     rawtable.flush()
     data.close()
