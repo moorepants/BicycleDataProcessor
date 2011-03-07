@@ -1,7 +1,7 @@
-import tables as tab
-import numpy as np
 import os
 import re
+import tables as tab
+import numpy as np
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
@@ -24,8 +24,8 @@ def unsize_vector(vector, m):
         oldvec = vector[:m]
     elif m > len(vector):
         oldvec = vector
-        print("This one is actually longer, you may want to get the complete
-              data, or improve this function so it does that.")
+        print('This one is actually longer, you may want to get the ' +
+              'complete data, or improve this function so it does that.')
     elif m == len(vector):
         oldvec = vector
     else:
@@ -46,6 +46,7 @@ def size_vector(vector, m):
     Returns
     -------
     newvec : numpy array, shape(m, )
+
     '''
     nsamp = len(vector)
     # if the desired length is larger then pad witn nan's
