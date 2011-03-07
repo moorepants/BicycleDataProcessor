@@ -3,6 +3,24 @@ import numpy as np
 import os
 import re
 
+def unpad_vector(vector, samplenum):
+    '''Returns a vector with the nan padding removed.
+
+    Parameters
+    ----------
+    vector : numpy array, shape(n, )
+        A vector that may or may not have nan padding and the end of the data.
+    samplenum : int
+        Number of valid values in the vector.
+
+    Returns
+    -------
+    numpy array, shape(m, )
+        The vector with the padding removed. m = samplenum
+
+    '''
+    return vector[:samplenum]
+
 def pad_vector(vector, length):
     '''Returns a vector with nan's padded on to the end.
 
@@ -17,7 +35,13 @@ def pad_vector(vector, length):
     return np.append(vector, nans)
 
 def fill_table(datafile):
-    '''Adds all the data to the table'''
+    '''Adds all the data from the hdf5 files in the h5 directory to the table.
+
+    Parameters
+    ----------
+    datafile : string
+        path to the main hdf5 file
+    '''
 
     # load the files from the ../BicycleDAQ/data/h5 directory
     pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
@@ -26,19 +50,26 @@ def fill_table(datafile):
     data = tab.openFile(datafile, mode='a')
     # get the table
     rawtable = data.root.rawdata.rawdatatable
+    print rawtable.colnames
     # get the row
     row = rawtable.row
     # fill the rows with data
     for run in files:
-        print run
+        print 'Adding run: %s' % run
         rundata = get_run_data(os.path.join(pathtoh5, run))
         for par, val in rundata['par'].items():
             row[par] = val
+        # for the data don't add it if it is longer than 12000 samples
         for i, col in enumerate(rundata['NICols']):
-            #print row[col].shape, rundata['NIData'][i].shape
-            row[col] = pad_vector(rundata['NIData'][i], 12000)
+            try:
+                row[col] = pad_vector(rundata['NIData'][i], 12000)
+            except:
+                pass
         for i, col in enumerate(rundata['VNavCols']):
-            row[col] = pad_vector(rundata['VNavData'][i], 12000)
+            try:
+                row[col] = pad_vector(rundata['VNavData'][i], 12000)
+            except:
+                pass
         row.append()
     rawtable.flush()
     data.close()
@@ -52,11 +83,11 @@ def create_database():
     filteredrun = get_run_data(os.path.join(pathtoh5, files[0]))
     unfilteredrun = get_run_data(os.path.join(pathtoh5, files[-1]))
     if filteredrun['par']['ADOT'] is not 14:
-        print 'Run %d is not a filtered run, choose again' %
-        filteredrun['par']['RunID']
+        print('Run %d is not a filtered run, choose again' %
+              filteredrun['par']['RunID'])
     if unfilteredrun['par']['ADOT'] is not 253:
-        print 'Run %d is not a unfiltered run, choose again' %
-        unfilteredrun['par']['RunID']
+        print('Run %d is not a unfiltered run, choose again' %
+              unfilteredrun['par']['RunID'])
     # generate the table description class
     RawRun = create_raw_run_class(filteredrun, unfilteredrun)
     # open a new hdf5 file for writing
@@ -86,14 +117,14 @@ def create_raw_run_class(filteredrun, unfilteredrun):
     '''
 
     # combine the VNavCols from unfiltered and filtered
-    
+    VNavCols = set(filteredrun['VNavCols'] + unfilteredrun['VNavCols'])
 
     # set up the table description
     class RawRun(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(unfilteredrun['NICols']):
             exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
-        for k, col in enumerate(unfilteredrun['VNavCols']):
+        for k, col in enumerate(VNavCols):
             exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(unfilteredrun['par'].items()):
             pos = k+1+i
@@ -106,7 +137,7 @@ def create_raw_run_class(filteredrun, unfilteredrun):
             elif isinstance(val, type(np.ones(1))):
                 exec(key + " = tab.Float64Col(shape=(" + str(len(val)) + ", ), pos=pos)")
 
-        # get rid of these intermediate variables
+        # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val)
 
     return RawRun
