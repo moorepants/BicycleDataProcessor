@@ -1,4 +1,0 @@
-
-import tables as tab
-
-calibdata = tab.openFile('../BicycleDAQ/data/calibdata.h5')
