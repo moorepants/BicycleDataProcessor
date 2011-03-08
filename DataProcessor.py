@@ -4,6 +4,7 @@ import tables as tab
 import numpy as np
 import scipy as sp
 from scipy.optimize import fmin_bfgs
+import matplotlib.pyplot as plt
 
 class Run():
     '''
@@ -41,26 +42,74 @@ class Run():
         # if the data hasn't been time shifted, then do it now
         curtau = datatable[rownum]['tau']
         print 'curtau', curtau
-        if curtau == 0.:
-            NIacc = datatable[rownum]['FrameAccelY']
-            VNacc = datatable[rownum]['AccelerationZ']
-            Fs = datatable[rownum]['NISampleRate']
-            tau = find_timeshift(NIacc, VNacc, Fs)
-            print 'This is tau', tau
+        #if curtau == 0.:
+        NIacc = get_cell(datatable, 'FrameAccelY', rownum)
+        VNacc = get_cell(datatable, 'AccelerationZ', rownum)
+        Fs = get_cell(datatable, 'NISampleRate', rownum)
+        tau = find_timeshift(NIacc, VNacc, Fs)
+        print 'This is tau', tau
+        datatable.cols.tau[rownum] = tau
+        datatable.flush()
 
         for col in datatable.colnames:
             # grab the data for the run number and column name
-            coldata = datatable[rownum][col]
-            # figure out if the object is one of the data arrays so we can
-            # unsize it
-            if isinstance(coldata, type(np.ones(1))) and coldata.shape[0] == 12000:
-                numsamp = datatable[int(runid)]['NINumSamples']
-                coldata = unsize_vector(coldata, numsamp)
-                # now check to see if we need to process the data
-                if np.sum(coldata) == 0. and col in processedCols:
-                    print col, 'needs some processing'
+            coldata = get_cell(datatable, col, rownum)
+            # now check to see if we need to process the data
+            if np.sum(coldata) == 0. and col in processedCols:
+                print col, 'needs some processing'
 
             self.data[col] = coldata
+
+def get_cell(datatable, colname, rownum):
+    '''
+    Returns the contents of a cell in a pytable.
+
+    Parameters
+    ----------
+    datatable : pytable table
+        This is a pointer to the table.
+    colname : str
+        This is the name of the column in the table.
+    rownum : int
+        This is the rownumber of the cell.
+
+    Return
+    ------
+    cell : varies
+        This is the contents of the cell.
+
+    '''
+    cell = datatable[rownum][colname]
+    # if it is an array and the default size then unsize it
+    if isinstance(cell, type(np.ones(1))) and cell.shape[0] == 12000:
+        numsamp = datatable[rownum]['NINumSamples']
+        cell = unsize_vector(cell, numsamp)
+
+    return cell
+
+def truncate_data(series, typ, fs, tau):
+    '''
+    Returns the truncated vectors with respect to the timeshift tau.
+
+    Parameters
+    ---------
+    series : ndarray, shape(n, )
+        A time series from the NIData or the VNavData.
+    typ : string
+        Either 'NI' or 'VN' depending on which signal you have.
+    fs : int
+        The sample frequency.
+    tau : float
+        The time shift.
+
+    Returns
+    -------
+    truncated : ndarray, shape(m, )
+        The truncated time series.
+
+    '''
+    pass
+
 
 def get_row_num(runid, table):
     '''
@@ -94,17 +143,20 @@ def sync_error(tau, s1, s2, t):
     s1 : ndarray, shape(n, )
         Vertical acceleration data of the NI accelerometer
     s2 : ndarray, shape(n, )
-        Vertical acceleration data of the VN accelerometer
+        Vertical acceleration data of the VN accelerometer. This signal may
+        have some nan's.
     t : ndarray
         Time
 
     Returns
     -------
     e : float
-        Error
+        Error between the two signals.
 
     '''
+    # the number of samples
     N = t.shape[0]
+    # set up a shifted time vector
     t1_interp = np.linspace(np.min(t) + np.abs(tau),
                             np.max(t) - np.abs(tau),
                             N)
@@ -127,7 +179,7 @@ def find_timeshift(NIacc, VNacc, Fs):
        The (mostly) vertical acceleration from the NI box.
     VNacc : ndarray, shape(n, )
         The (mostly) vertical acceleration from the VectorNav.
-    Fs : int
+    Fs : float or int
         Sample rate of the signals. This should be the same for each signal.
 
     Returns
@@ -143,7 +195,7 @@ def find_timeshift(NIacc, VNacc, Fs):
     s2 = s2_raw - np.mean(s2_raw[~np.isnan(s2_raw)])
 
     N = s1.shape[0]
-    t = np.arange(0, N)/Fs
+    t = np.linspace(0, N/float(Fs), N)
 
     # Error Landscape
     tau_range = np.linspace(-1, 1, Fs*2+1)
@@ -153,7 +205,7 @@ def find_timeshift(NIacc, VNacc, Fs):
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
-    ##     tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
+    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
     tau = tau0
     return tau
 
