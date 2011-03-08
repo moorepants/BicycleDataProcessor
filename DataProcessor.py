@@ -129,8 +129,8 @@ def find_timeshift(NIacc, VNacc, Fs):
     # Error Landscape
     tau_range = np.linspace(-1, 1, 201)
     e = np.zeros(tau_range.shape)
-    for i, ran in enumerate(tau_range):
-        e[i] = sync_error(ran, s1, s2, t)
+    for i, item in enumerate(tau_range):
+        e[i] = sync_error(item, s1, s2, t)
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
