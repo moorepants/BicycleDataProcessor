@@ -120,23 +120,24 @@ def find_timeshift(NIacc, VNacc, Fs):
 
     s1_raw = -(NIacc - 1.5) / (300. / 1000.) * 9.81
     s2_raw = VNacc
-    s1 = s1_raw - np.mean(s1_raw)
+    s1 = s1_raw - np.mean(s1_raw[~np.isnan(s1_raw)])
     s2 = s2_raw - np.mean(s2_raw[~np.isnan(s2_raw)])
 
     N = s1.shape[0]
     t = np.arange(0, N)/Fs
 
     # Error Landscape
-    tau_range = np.linspace(-1, 1, 201)
+    tau_range = np.linspace(-1, 1, Fs*2+1)
     e = np.zeros(tau_range.shape)
     for i, ran in enumerate(tau_range):
         e[i] = sync_error(ran, s1, s2, t)
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
-    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
-
+    ##     tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
+    tau = tau0
     return tau
+    
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
