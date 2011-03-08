@@ -26,33 +26,63 @@ class Run():
         # get the data table
         datatable = datafile.root.data.datatable
 
-        self.d = {}
+        # these are the columns that may need to be calculated
+        processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
+                         'RearWheelRate', 'SteerTorque', 'YawRate',
+                         'PitchRate', 'FrameAccelerationX',
+                         'FrameAccelerationY', 'FrameAccelerationZ', 'tau']
+
+        # make a container for the data
+        self.data = {}
+
+        # get the row number for this particular run id
+        rownum = [x.nrow for x in datatable.iterrows() if x['RunID'] ==
+                  int(runid)][0]
+        print rownum
+
+        # if the data hasn't been time shifted, then do it now
+        curtau = datatable[rownum]['tau']
+        print 'curtau', curtau
+        if curtau == 0.:
+            NIacc = datatable[rownum]['FrameAccelY']
+            VNacc = datatable[rownum]['AccelerationZ']
+            Fs = datatable[rownum]['NISampleRate']
+            tau = find_timeshift(NIacc, VNacc, Fs)
+            print 'This is tau', tau
 
         for col in datatable.colnames:
-            coldata = datatable[int(runid)][col]
-            try:
-                if len(coldata) == 12000:
-                    numsamp = datatable[int(runid)]['NINumSamples']
-                    coldata = unsize_vector(coldata, numsamp)
-            except:
-                pass
-            self.d[col] = coldata
+            # grab the data for the run number and column name
+            coldata = datatable[rownum][col]
+            # figure out if the object is one of the data arrays so we can
+            # unsize it
+            if isinstance(coldata, type(np.ones(1))) and coldata.shape[0] == 12000:
+                numsamp = datatable[int(runid)]['NINumSamples']
+                coldata = unsize_vector(coldata, numsamp)
+                # now check to see if we need to process the data
+                if np.sum(coldata) == 0. and col in processedCols:
+                    print col, 'needs some processing'
 
+            self.data[col] = coldata
 
-def sync_error(tau,s1,s2,t):
+def sync_error(tau, s1, s2, t):
     '''
     Returns the error between two signals.
 
     Parameters
     ----------
-    tau :
-    s1 :
-    s2 :
-    t :
+    tau : float
+        Guess for the time shift
+    s1 : ndarray, shape(n, )
+        Vertical acceleration data of the NI accelerometer
+    s2 : ndarray, shape(n, )
+        Vertical acceleration data of the VN accelerometer
+    t : ndarray
+        Time
 
     Returns
     -------
-    e :
+    e : float
+        Error
 
     '''
     N = t.shape[0]
@@ -67,17 +97,19 @@ def sync_error(tau,s1,s2,t):
     e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
     return e
 
-def find_timeshift(s1, s2, Fs):
+def find_timeshift(NIacc, VNacc, Fs):
     '''
     Returns the timeshift (tau) of the VectorNav (VN) data relative to the
     National Instruments (NI) data based on the first 20% of the data.
 
     Parameters
     ----------
-    s1 : ndarray, shape(n, )
-        Vertical acceleration data of the NI accelerometer
-    s2 : ndarray, shape(n, )
-        Vertical acceleration data of the VN accelerometer
+    NIacc : ndarray, shape(n, )
+       The (mostly) vertical acceleration from the NI box.
+    VNacc : ndarray, shape(n, )
+        The (mostly) vertical acceleration from the VectorNav.
+    Fs : int
+        Sample rate of the signals. This should be the same for each signal.
 
     Returns
     -------
@@ -86,13 +118,18 @@ def find_timeshift(s1, s2, Fs):
 
     '''
 
+    s1_raw = -(NIacc - 1.5) / (300. / 1000.) * 9.81
+    s2_raw = VNacc
+    s1 = s1_raw - np.mean(s1_raw)
+    s2 = s2_raw - np.mean(s2_raw[~np.isnan(s2_raw)])
+
     N = s1.shape[0]
     t = np.arange(0, N)/Fs
 
     # Error Landscape
     tau_range = np.linspace(-1, 1, 201)
     e = np.zeros(tau_range.shape)
-    for ran in tau_range:
+    for i, ran in enumerate(tau_range):
         e[i] = sync_error(ran, s1, s2, t)
 
     # Find initial condition from landscape and optimize!
@@ -264,7 +301,10 @@ def create_run_table_class(filteredrun, unfilteredrun):
                          'PitchRate', 'FrameAccelerationX',
                          'FrameAccelerationY', 'FrameAccelerationZ', 'tau']
         for k, col in enumerate(processedCols):
-            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
+            if col == 'tau':
+                exec(col + " = tab.Float32Col(pos=i+1+k)")
+            else:
+                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
 
         # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val, processedCols)
