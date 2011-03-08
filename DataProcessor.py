@@ -221,7 +221,7 @@ def fill_table(datafile):
     Parameters
     ----------
     datafile : string
-        path to the main hdf5 file
+        path to the main hdf5 file: InstrumentedBicycleData.h5
     '''
 
     # load the files from the ../BicycleDAQ/data/h5 directory
