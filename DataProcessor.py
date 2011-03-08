@@ -36,9 +36,7 @@ class Run():
         self.data = {}
 
         # get the row number for this particular run id
-        rownum = [x.nrow for x in datatable.iterrows() if x['RunID'] ==
-                  int(runid)][0]
-        print rownum
+        rownum = get_row_num(runid, datatable)
 
         # if the data hasn't been time shifted, then do it now
         curtau = datatable[rownum]['tau']
@@ -63,6 +61,27 @@ class Run():
                     print col, 'needs some processing'
 
             self.data[col] = coldata
+
+def get_row_num(runid, table):
+    '''
+    Returns the row number for a particular run id.
+
+    Parameters
+    ----------
+    runid : int or string
+        The run id.
+    table : pytable
+        The run data table.
+
+    Returns
+    -------
+    rownum : int
+        The row number for runid.
+
+    '''
+    rownum = [x.nrow for x in table.iterrows()
+              if x['RunID'] == int(runid)]
+    return rownum[0]
 
 def sync_error(tau, s1, s2, t):
     '''
@@ -137,7 +156,6 @@ def find_timeshift(NIacc, VNacc, Fs):
     ##     tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
     tau = tau0
     return tau
-    
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
