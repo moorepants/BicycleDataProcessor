@@ -55,7 +55,7 @@ class Run():
             # grab the data for the run number and column name
             coldata = get_cell(datatable, col, rownum)
             # now check to see if we need to process the data
-            if np.sum(coldata) == 0. and col in processedCols:
+            if col in processedCols and np.sum(coldata) == 0.:
                 print col, 'needs some processing'
 
             self.data[col] = coldata
@@ -80,7 +80,7 @@ def get_cell(datatable, colname, rownum):
 
     '''
     cell = datatable[rownum][colname]
-    # if it is an array and the default size then unsize it
+    # if it is a numpy array and the default size then unsize it
     if isinstance(cell, type(np.ones(1))) and cell.shape[0] == 12000:
         numsamp = datatable[rownum]['NINumSamples']
         cell = unsize_vector(cell, numsamp)
