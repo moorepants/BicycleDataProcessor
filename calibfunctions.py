@@ -25,7 +25,7 @@ def linearcalib(V,calibdata):
     s = p1*V + p0
     return s
 
-def bodyfixedgyro(omega_x,omega_y,omega_z,bikeparms):
+def rollpitchyawrate(framerate_x,framerate_y,framerate_z,bikeparms):
     '''Transforms the measured body fixed rates to global rates by
     rotating them along the head angle.
 
@@ -39,19 +39,20 @@ def bodyfixedgyro(omega_x,omega_y,omega_z,bikeparms):
 
     Output
     ----------
-    s : array
+    yawrate, pitchrate, rollrate : array
         Calibrated signal
 
     '''
     lam = bikeparms['lambda']
-    omega_xg =  omega_x*cos(lam) +omega_z*sin(lam)
-    omega_yg =  omega_y
-    omega_zg = -omega_x*sin(lam) +omega_z*sin(lam)
-    return omega_xg
+    rollrate  =  omega_x*cos(lam) + omega_z*sin(lam)
+    pitchrate =  omega_y
+    yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
+    return yawrate, pitchrate, rollrate
 
-def steerrate(steergyro,omega_xg, omega_zg, bikeparms):
+def steerrate(steergyro,framerate_z):
     lam = bikeparms['lambda']
-    deltad = steergyro + omega_xg*np.sin(lam) - omega_zg*cos(lam)
+    deltad = steergyro + framerate_z
     return deltad
+
 
 
