@@ -62,7 +62,8 @@ class Run():
 
 def get_cell(datatable, colname, rownum):
     '''
-    Returns the contents of a cell in a pytable.
+    Returns the contents of a cell in a pytable. Apply unsize_vector correctly
+    for padded vectors.
 
     Parameters
     ----------
