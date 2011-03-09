@@ -108,8 +108,22 @@ def truncate_data(series, typ, fs, tau):
         The truncated time series.
 
     '''
-    pass
+    n = len(series)
+    t = np.linspace(0., n/fs-1./fs, num=n)
 
+    # shift the ni data cause it the cleaner signal
+    tni = t - tau
+    tvn = t
+
+    # make the common time interval
+    tcom = tvn[np.nonzero(tvn < tni[-1])]
+
+    if typ == 'NI':
+        truncated = sp.interp(tcom, tni, series)
+    elif typ == 'VN':
+        truncated = series[np.nonzero(tvn <= tcom[-1])]
+
+    return truncated
 
 def get_row_num(runid, table):
     '''
@@ -118,7 +132,7 @@ def get_row_num(runid, table):
     Parameters
     ----------
     runid : int or string
-        The run id.
+   The run id.
     table : pytable
         The run data table.
 
