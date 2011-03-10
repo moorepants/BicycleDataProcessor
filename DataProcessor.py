@@ -493,3 +493,40 @@ def get_run_data(pathtofile):
     runfile.close()
 
     return rundata
+    
+    
+def get_calib_data(pathtofile):
+    '''Returns calibration data from the run h5 files using pytables and
+    formats it as a dictionairy
+    Parameters
+    ---------
+    pathtofile : string
+    The path to the h5 file that contains the calibration data, normally:
+    pathtofile = '../BicycleDAQ/data/CalibData/calibdata.h5'
+    
+    Returns
+    -------
+    calibdata : dictionary
+    A dictionary that looks similar to how the data was stored in Matlab.
+    '''
+    
+    # open the file
+    calibfile = tab.openFile(pathtofile)
+    # intialize a dictionary for storage
+    calibdata = {}
+    
+    # Specify names to check
+    namelist = ['name1','name2','name3','name4','name5','name6']
+    fieldnamelist = []
+    
+    # Generate dictionary structure
+    for a in calibfile.root.calibdata.__iter__():
+        if a.name in namelist:
+            calibdata[str(a.read()[0])] = {}
+            fieldnamelist.append(str(a.read()[0]))
+    
+    # Fill dictionary structure
+        for a in calibfile.root.calibdata.__iter__():
+        i = int(a.name[-1])-1
+        calibdata[fieldnamelist[i]][a.name[:-1]] = a.read()[0]
+    return rundata
