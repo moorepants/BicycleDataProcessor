@@ -533,6 +533,9 @@ def get_run_data(pathtofile):
                     parsed = np.array([float(x) for x in parsed])
                 rundata['par'][col.name] = parsed
 
+    if 'Notes' not in rundata['par'].keys():
+        rundata['par']['Notes'] = ''
+
     # get the NIData and VNavData
     rundata['NIData'] = runfile.root.NIData.read()
     rundata['VNavData'] = runfile.root.VNavData.read()
