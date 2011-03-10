@@ -52,6 +52,10 @@ class Run():
         datatable.cols.tau[rownum] = tau
         datatable.flush()
 
+
+        cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
+                'CalibData', 'calibdata.h5'))
+
         for col in datatable.colnames:
             # grab the data for the run number and column name
             coldata = get_cell(datatable, col, rownum)
@@ -60,35 +64,39 @@ class Run():
                 print col, 'needs some processing'
                 if col == 'tau':
                     pass
-
+                elif col in cdat.keys():
+                    print 'Processing', col
+                    voltage = get_cell(datatable, cdat[col]['signal'], rownum)
+                    scaled = linear_calib(voltage, cdat[col])
+                    coldata = truncate_data(scaled, 'NI', Fs, tau)
 
             self.data[col] = coldata
 
-def linearcalib(V, calibdata):
+def linear_calib(V, calibdata):
     '''Linear tranformation from raw voltage measurements (V) to calibrated
     data signals (s).
 
     Parameters
     ----------
-    V : array
-        Measurements
+    V : ndarray, shape(n, )
+        Time series of voltage measurements.
 
-    calibdata : Dictionary
+    calibdata : dictionary
         Calibration data
 
     Output
     ----------
-    s : array
+    s : ndarray, shape(n, )
         Calibrated signal
 
     '''
 
-    p1 = calibdata['Slope']
-    p0 = calibdata['Offset']
+    p1 = calibdata['slope']
+    p0 = calibdata['offset']
     s = p1*V + p0
     return s
 
-def rollpitchyawrate(framerate_x,framerate_y,framerate_z,bikeparms):
+def rollpitchyawrate(framerate_x, framerate_y, framerate_z, bikeparms):
     '''Transforms the measured body fixed rates to global rates by
     rotating them along the head angle.
 
@@ -112,7 +120,7 @@ def rollpitchyawrate(framerate_x,framerate_y,framerate_z,bikeparms):
     yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
     return yawrate, pitchrate, rollrate
 
-def steerrate(steergyro,framerate_z):
+def steerrate(steergyro, framerate_z):
     lam = bikeparms['lambda']
     deltad = steergyro + framerate_z
     return deltad
@@ -442,7 +450,8 @@ def create_run_table_class(filteredrun, unfilteredrun):
         processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
                          'RearWheelRate', 'SteerTorque', 'YawRate',
                          'PitchRate', 'FrameAccelerationX',
-                         'FrameAccelerationY', 'FrameAccelerationZ', 'tau']
+                         'FrameAccelerationY', 'FrameAccelerationZ',
+                         'PullForce', 'tau']
         for k, col in enumerate(processedCols):
             if col == 'tau':
                 exec(col + " = tab.Float32Col(pos=i+1+k)")
@@ -576,7 +585,7 @@ def get_calib_data(pathtofile):
     calibdata = {}
 
     # Specify names to check
-    namelist = ['name' + str(i + 1) for i in range(6)]
+    namelist = ['name' + str(i) for i in range(1, 7)]
     fieldnamelist = []
 
     # Generate dictionary structure
