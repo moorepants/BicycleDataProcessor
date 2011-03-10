@@ -31,7 +31,8 @@ class Run():
         processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
                          'RearWheelRate', 'SteerTorque', 'YawRate',
                          'PitchRate', 'FrameAccelerationX',
-                         'FrameAccelerationY', 'FrameAccelerationZ', 'tau']
+                         'FrameAccelerationY', 'FrameAccelerationZ',
+                         'PullForce', 'tau']
 
         # make a container for the data
         self.data = {}
@@ -55,10 +56,66 @@ class Run():
             # grab the data for the run number and column name
             coldata = get_cell(datatable, col, rownum)
             # now check to see if we need to process the data
-            if col in processedCols and np.sum(coldata) == 0.:
+            if col in processedCols: # and np.sum(coldata) == 0.:
                 print col, 'needs some processing'
+                if col == 'tau':
+                    pass
+
 
             self.data[col] = coldata
+
+def linearcalib(V, calibdata):
+    '''Linear tranformation from raw voltage measurements (V) to calibrated
+    data signals (s).
+
+    Parameters
+    ----------
+    V : array
+        Measurements
+
+    calibdata : Dictionary
+        Calibration data
+
+    Output
+    ----------
+    s : array
+        Calibrated signal
+
+    '''
+
+    p1 = calibdata['Slope']
+    p0 = calibdata['Offset']
+    s = p1*V + p0
+    return s
+
+def rollpitchyawrate(framerate_x,framerate_y,framerate_z,bikeparms):
+    '''Transforms the measured body fixed rates to global rates by
+    rotating them along the head angle.
+
+    Parameters
+    ----------
+    omega_x, omega_y, omega_z : array
+        Body fixed angular velocities
+
+    bikeparms : Dictionary
+        Bike parameters
+
+    Output
+    ----------
+    yawrate, pitchrate, rollrate : array
+        Calibrated signal
+
+    '''
+    lam = bikeparms['lambda']
+    rollrate  =  omega_x*cos(lam) + omega_z*sin(lam)
+    pitchrate =  omega_y
+    yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
+    return yawrate, pitchrate, rollrate
+
+def steerrate(steergyro,framerate_z):
+    lam = bikeparms['lambda']
+    deltad = steergyro + framerate_z
+    return deltad
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -471,10 +528,10 @@ def get_run_data(pathtofile):
     rundata['NIData'] = runfile.root.NIData.read()
     rundata['VNavData'] = runfile.root.VNavData.read()
 
-    # make the array into a list of python strings
-    columns = [str(x) for x in runfile.root.VNavCols.read()]
-    # gets rid of unescaped control characters
-    columns = [re.sub(r'[^ -~].*', '', x) for x in columns]
+    # make the array into a list of python string and gets rid of unescaped
+    # control characters
+    columns = [re.sub(r'[^ -~].*', '', str(x))
+               for x in runfile.root.VNavCols.read()]
     # gets rid of white space
     rundata['VNavCols'] = [x.replace(' ', '') for x in columns]
     # make a list of NI columns from the InputPair structure from matlab
@@ -493,40 +550,46 @@ def get_run_data(pathtofile):
     runfile.close()
 
     return rundata
-    
-    
+
 def get_calib_data(pathtofile):
-    '''Returns calibration data from the run h5 files using pytables and
-    formats it as a dictionairy
+    '''
+    Returns calibration data from the run h5 files using pytables and
+    formats it as a dictionairy.
+
     Parameters
-    ---------
+    ----------
     pathtofile : string
-    The path to the h5 file that contains the calibration data, normally:
-    pathtofile = '../BicycleDAQ/data/CalibData/calibdata.h5'
-    
+        The path to the h5 file that contains the calibration data, normally:
+        pathtofile = '../BicycleDAQ/data/CalibData/calibdata.h5'
+
     Returns
     -------
     calibdata : dictionary
-    A dictionary that looks similar to how the data was stored in Matlab.
+        A dictionary that looks similar to how the data was stored in Matlab.
+
     '''
-    
+
     # open the file
     calibfile = tab.openFile(pathtofile)
+
     # intialize a dictionary for storage
     calibdata = {}
-    
+
     # Specify names to check
-    namelist = ['name1','name2','name3','name4','name5','name6']
+    namelist = ['name' + str(i + 1) for i in range(6)]
     fieldnamelist = []
-    
+
     # Generate dictionary structure
     for a in calibfile.root.calibdata.__iter__():
         if a.name in namelist:
             calibdata[str(a.read()[0])] = {}
             fieldnamelist.append(str(a.read()[0]))
-    
+
     # Fill dictionary structure
-        for a in calibfile.root.calibdata.__iter__():
-        i = int(a.name[-1])-1
-        calibdata[fieldnamelist[i]][a.name[:-1]] = a.read()[0]
-    return rundata
+    for a in calibfile.root.calibdata.__iter__():
+        i = int(re.sub('\D', '', a.name)) - 1
+        calibdata[fieldnamelist[i]][re.sub('\d', '', a.name)] = a.read()[0]
+
+    calibfile.close()
+
+    return calibdata
