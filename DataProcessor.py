@@ -11,7 +11,7 @@ class Run():
     The fundamental class for a run.
 
     '''
-    def __init__(self, runid, datafile):
+    def __init__(self, runid, datafile, forcerecalc=False):
         '''Loads all parameters if available otherwise it generates them.
 
         Parameters
@@ -21,6 +21,9 @@ class Run():
         datafile : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
+        forcecalc : boolean
+            If true then it will force a recalculation of all the the non raw
+            data.
 
         '''
 
@@ -71,6 +74,76 @@ class Run():
                     coldata = truncate_data(scaled, 'NI', Fs, tau)
 
             self.data[col] = coldata
+
+    def plot(self, *args):
+        '''
+        Plots the time series of various signals.
+
+        Parameters
+        ----------
+        args* : string
+            These should be strings that correspond to processed data
+            columns.
+
+        '''
+        samplerate = self.data['NISampleRate']
+        #n = len(self.data['SteerAngle'])
+        n = len(self.data['SteerPotentiometer'])
+        t = np.linspace(0., n/samplerate, num=n)
+
+        for i, arg in enumerate(args):
+            if arg == 'SteerTorque':
+                plt.plot(t, size_vector(self.data[arg]*10., n))
+            else:
+                plt.plot(t, size_vector(self.data[arg], n))
+
+        plt.legend(args)
+
+        plt.title('Rider: ' + self.data['Rider'] +
+                  ', Speed: ' + str(self.data['Speed']) + 'm/s\n' +
+                  'Maneuver: ' + self.data['Maneuver'] +
+                  ', Environment: ' + self.data['Environment'] + '\n' +
+                  'Notes: ' + self.data['Notes'])
+        plt.grid()
+
+        plt.show()
+
+    def video(self):
+        '''
+        Plays the video of the run.
+
+        '''
+        runid = pad_with_zeros(str(self.data['RunID']), 5)
+        print runid
+        viddir = os.path.join('..', 'Video')
+        print viddir
+        abspath = os.path.abspath(viddir)
+        print abspath
+        path = os.path.join(abspath, runid + '.mp4')
+        print path
+
+        os.system('vlc "' + path + '"')
+
+def pad_with_zeros(num, digits):
+    '''
+    Adds zeros to the front of a string needed to produce the number of
+    digits.
+
+    Parameters
+    ----------
+    num : string
+        A string representation of a number (i.e. '25')
+    digits : integer
+        The total number of digits desired.
+
+    If digits = 4 and num = '25' then the function returns '0025'.
+
+    '''
+
+    for i in range(digits - len(num)):
+        num = '0' + num
+
+    return num
 
 def linear_calib(V, calibdata):
     '''Linear tranformation from raw voltage measurements (V) to calibrated
