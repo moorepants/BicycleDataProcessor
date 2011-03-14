@@ -113,16 +113,16 @@ class Run():
         Plays the video of the run.
 
         '''
+        # get the 5 digit string version of the run id
         runid = pad_with_zeros(str(self.data['RunID']), 5)
-        print runid
         viddir = os.path.join('..', 'Video')
-        print viddir
         abspath = os.path.abspath(viddir)
-        print abspath
-        path = os.path.join(abspath, runid + '.mp4')
-        print path
-
-        os.system('vlc "' + path + '"')
+        # check to see if there is a video for this run
+        if (runid + .mp4) in os.listdir(viddir):
+            path = os.path.join(abspath, runid + '.mp4')
+            os.system('vlc "' + path + '"')
+        else:
+            print "No video for this run"
 
 def pad_with_zeros(num, digits):
     '''
