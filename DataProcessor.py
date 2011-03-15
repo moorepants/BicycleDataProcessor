@@ -129,6 +129,54 @@ class Run():
         else:
             print "No video for this run"
 
+def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
+    '''Returns the indices that surround the bump in the acceleration signal.
+
+    Parameters
+    ----------
+    accelSignal : ndarray, shape(n,)
+        This is an acceleration signal with a single distinctive large
+        acceleration that signifies riding over the bump.
+    sampleRate : float
+        This is the sample rate of the signal.
+    speed : float
+        Speed of travel (or treadmill) in meters per second.
+    wheelbase : float
+        Wheelbase of the bicycle in meters.
+    bumpLength : float
+        Length of the bump in meters.
+
+    Returns
+    -------
+    indices : tuple
+        The first and last indice of the bump section.
+
+    '''
+    # get the indice of the larger of the max and min
+    maxmin = (np.nanmax(accelSignal), np.nanmin(accelSignal))
+    if np.abs(maxmin[0]) > np.abs(maxmin[1]):
+        indice = np.nanargmax(accelSignal)
+    else:
+        indice = np.nanargmin(accelSignal)
+
+    print 'Bump indice:', indice
+    print 'Bump time:', indice / sampleRate
+
+    # give a warning if the bump doesn't seem to be at the beginning of the run
+    if indice > len(accelSignal) / 4.:
+        print "This signal's max value is not in the first quarter of the data"
+        print("It is at %f seconds out of %f seconds" %
+            (indice / sampleRate, len(accelSignal) / sampleRate))
+
+    bumpDuration = (wheelbase + bumpLength) / speed
+    print "Bump duration:", bumpDuration
+    bumpSamples = int(bumpDuration * sampleRate)
+    # make the number divisible by two
+    if bumpSamples % 2 == 1:
+        bumpSamples = bumpSamples + 1
+
+    return (indice - bumpSamples / 2, indice + bumpSamples / 2)
+
 def derivative(x, y, method='forward'):
     '''
     Return the derivative of y with respect to x.
