@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import re
 import tables as tab
@@ -11,7 +12,7 @@ class Run():
     The fundamental class for a run.
 
     '''
-    def __init__(self, runid, datafile, forcerecalc=False):
+    def __init__(self, runid, datafile, forceRecalc=False):
         '''Loads all parameters if available otherwise it generates them.
 
         Parameters
@@ -46,14 +47,18 @@ class Run():
         # if the data hasn't been time shifted, then do it now
         curtau = datatable[rownum]['tau']
         print 'curtau', curtau
-        #if curtau == 0.:
-        NIacc = get_cell(datatable, 'FrameAccelY', rownum)
-        VNacc = get_cell(datatable, 'AccelerationZ', rownum)
         Fs = get_cell(datatable, 'NISampleRate', rownum)
-        tau = find_timeshift(NIacc, VNacc, Fs)
-        print 'This is tau', tau
-        datatable.cols.tau[rownum] = tau
-        datatable.flush()
+        if curtau == 0. or forceRecalc == True:
+            # calculate tau for this run
+            NIacc = get_cell(datatable, 'FrameAccelY', rownum)
+            VNacc = get_cell(datatable, 'AccelerationZ', rownum)
+            tau = find_timeshift(NIacc, VNacc, Fs)
+            print 'This is tau', tau
+            # store tau in the the table
+            datatable.cols.tau[rownum] = tau
+            datatable.flush()
+        else:
+            tau = curtau
 
 
         cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
@@ -118,11 +123,53 @@ class Run():
         viddir = os.path.join('..', 'Video')
         abspath = os.path.abspath(viddir)
         # check to see if there is a video for this run
-        if (runid + .mp4) in os.listdir(viddir):
+        if (runid + '.mp4') in os.listdir(viddir):
             path = os.path.join(abspath, runid + '.mp4')
             os.system('vlc "' + path + '"')
         else:
             print "No video for this run"
+
+def derivative(x, y, method='forward'):
+    '''
+    Return the derivative of y with respect to x.
+
+    Parameters:
+    -----------
+    x : ndarray, shape(n,)
+    y : ndarray, shape(n,)
+    type : string
+        'forward' : forward difference
+        'central' : central difference
+        'backward' : backward difference
+        'combination' : forward on the first point, backward on the last and
+        central on the rest
+
+    Returns:
+    --------
+    dydx : ndarray, shape(n,) or shape(n-1,)
+        for combination else shape(n-1,)
+
+    The combo method doesn't work for matrices yet.
+
+    '''
+    if method == 'forward':
+        return np.diff(y)/diff(x)
+    elif method == 'combination':
+        dxdy = np.zeros_like(y)
+        for i, yi in enumerate(y[:]):
+            if i == 0:
+                dxdy[i] = (-3*y[0] + 4*y[1] - y[2])/2/(x[1]-x[0])
+            elif i == len(y) - 1:
+                dxdy[-1] = (3*y[-1] - 4*y[-2] + y[-3])/2/(x[-1] - x[-2])
+            else:
+                dxdy[i] = (y[i + 1] - y[i - 1])/2/(x[i] - x[i - 1])
+        return dxdy
+    elif method == 'backward':
+        print 'There is no backward difference method defined, want to write one?'
+    elif method == 'central':
+        print 'There is no central difference method defined, want to write one?'
+    else:
+        print 'There is no sure method here! Try Again'
 
 def pad_with_zeros(num, digits):
     '''
@@ -513,7 +560,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
             if isinstance(val, type(1)):
                 exec(key + " = tab.Int64Col(pos=pos)")
             elif isinstance(val, type('')):
-                exec(key + " = tab.StringCol(itemsize=50, pos=pos)")
+                exec(key + " = tab.StringCol(itemsize=200, pos=pos)")
             elif isinstance(val, type(1.)):
                 exec(key + " = tab.Float64Col(pos=pos)")
             elif isinstance(val, type(np.ones(1))):
