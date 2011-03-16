@@ -171,11 +171,17 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     bumpDuration = (wheelbase + bumpLength) / speed
     print "Bump duration:", bumpDuration
     bumpSamples = int(bumpDuration * sampleRate)
-    # make the number divisible by two
-    if bumpSamples % 2 == 1:
-        bumpSamples = bumpSamples + 1
+    # make the number divisible by four
+    bumpSamples = int(bumpSamples / 4) * 4
 
-    return (indice - bumpSamples / 2, indice + bumpSamples / 2)
+    # get the first quarter before the tallest spike and whatever is after
+    indices = (indice - bumpSamples / 4, indice + 3 * bumpSamples / 4)
+
+    if np.isnan(accelSignal[indices[0]:indices[1]]).any():
+        print 'There is at least one NaN in this bump'
+
+    return indices
+
 
 def derivative(x, y, method='forward'):
     '''
@@ -437,25 +443,27 @@ def find_timeshift(NIacc, VNacc, Fs):
 
     '''
 
+    # scale the data and subtract the mean
     s1_raw = -(NIacc - 1.5) / (300. / 1000.) * 9.81
     s2_raw = VNacc
     s1 = s1_raw - np.mean(s1_raw[~np.isnan(s1_raw)])
     s2 = s2_raw - np.mean(s2_raw[~np.isnan(s2_raw)])
 
     N = s1.shape[0]
-    t = np.linspace(0, N/float(Fs), N)
+    time = np.linspace(0, N/float(Fs), N)
 
     # Error Landscape
-    tau_range = np.linspace(-1, 1, Fs*2+1)
+    # The NI lags the VectorNav and the time shift is typically between 0 and
+    # 0.5 seconds
+    tau_range = np.linspace(0., 0.5, num=Fs/2.)
     e = np.zeros(tau_range.shape)
     for i, item in enumerate(tau_range):
-        e[i] = sync_error(item, s1, s2, t)
+        e[i] = sync_error(item, s1, s2, time)
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
-    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, t))
-    tau = tau0
-    return tau
+    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, time))
+    return tau, e
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
