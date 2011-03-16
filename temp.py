@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import DataProcessor as dp
 
-runid = 195
+runid = 202
 wheelbase = 1.02
 bumpLength = 1.
 
@@ -32,24 +32,27 @@ print 'VNav Signal'
 vnbump =  dp.find_bump(vnSig, float(sampleRate), speed, wheelbase, bumpLength)
 print vnbump
 
-niBumpSig = niSig[vnbump[0]:nibump[1]]
-vnBumpSig = vnSig[vnbump[0]:nibump[1]]
+niBumpSig = niSig[vnbump[0]:nibump[2]]
+vnBumpSig = vnSig[vnbump[0]:nibump[2]]
 
-tau, e = dp.find_timeshift(niBumpSig, vnBumpSig, sampleRate)
+guess = (nibump[1] - vnbump[1]) / float(sampleRate)
+print 'This is the guess:', guess
+
+tau, e = dp.find_timeshift(niBumpSig, vnBumpSig, sampleRate, guess)
 print 'Tau:', tau
 
 plt.figure()
 plt.plot(e)
 
-# scale 
+# scale
 niSig = -(niSig - threevolts/2.) / (300. / 1000.) * 9.81
 
 # subtract the mean
 niSig = niSig - stats.nanmean(niSig)
 vnSig = vnSig - stats.nanmean(vnSig)
 
-niBumpSig = niSig[vnbump[0]:nibump[1]]
-vnBumpSig = vnSig[vnbump[0]:nibump[1]]
+niBumpSig = niSig[vnbump[0]:nibump[2]]
+vnBumpSig = vnSig[vnbump[0]:nibump[2]]
 
 plt.figure()
 plt.plot(niBumpSig)
@@ -57,8 +60,12 @@ plt.plot(vnBumpSig)
 plt.title('This the bump')
 
 plt.figure()
-plt.plot(niSig)
-plt.plot(vnSig)
+fillx = [vnbump[0], vnbump[0], nibump[2], nibump[2]]
+filly = [-10, 10, 10, -10]
+plt.fill(fillx, filly, 'y', edgecolor='k', alpha=0.4)
+plt.plot(niSig, 'k')
+plt.plot(vnSig, 'b')
+plt.ylim((np.nanmax(niSig) + .1, np.nanmin(niSig) - .1))
 plt.legend(['NI', 'VN'])
 plt.title('Before truncation')
 
@@ -72,18 +79,18 @@ plt.plot(vnSigTr)
 plt.legend(['NI', 'VN'])
 plt.title('After truncation')
 
-# plot the difference to see if you can see the point at which the nan's
-# potentially shift the data
-plt.figure()
-plt.plot(niSigTr-vnSigTr)
-plt.title('Difference in the two signals')
-
-t = np.linspace(0., numSamples/sampleRate, num=numSamples)
-dNdt = dp.derivative(t, niSig, method='combination')
-
-# plot the derivative of the ni sig
-plt.figure()
-plt.plot(t, dNdt)
-plt.title('Derivative of the NI Signal')
+#### plot the difference to see if you can see the point at which the nan's
+#### potentially shift the data
+###plt.figure()
+###plt.plot(niSigTr-vnSigTr)
+###plt.title('Difference in the two signals')
+###
+###t = np.linspace(0., numSamples/sampleRate, num=numSamples)
+###dNdt = dp.derivative(t, niSig, method='combination')
+###
+#### plot the derivative of the ni sig
+###plt.figure()
+###plt.plot(t, dNdt)
+###plt.title('Derivative of the NI Signal')
 
 plt.show()

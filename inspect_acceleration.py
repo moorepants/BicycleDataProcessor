@@ -10,7 +10,7 @@ for x in datatable.iterrows():
         pass
     else:
         if x['Maneuver'] != 'System Test':
-            numSamp = x['NINumSamples']    
+            numSamp = x['NINumSamples']
             sampleRate = x['NISampleRate']
             time = np.linspace(0., numSamp/sampleRate, num=numSamp)
             acceleration = dp.unsize_vector(x['FrameAccelY'], numSamp)
@@ -18,11 +18,11 @@ for x in datatable.iterrows():
             print 'Run ID:', x['RunID']
             print 'Speed:', x['Speed']
             print 'Notes:', x['Notes']
-            print 'Environment:', x['Environment'] 
-            print 'Maneuver:', x['Maneuver'] 
+            print 'Environment:', x['Environment']
+            print 'Maneuver:', x['Maneuver']
             print 'Total time:', time[-1]
             print 'Time of max value:', time[np.argmax(acceleration)]
-            print 'Max value:', np.max(acceleration) 
+            print 'Max value:', np.max(acceleration)
             print '--------------------'
             if time[np.argmax(acceleration)] > 5.:
                 plt.figure(x['RunID'])

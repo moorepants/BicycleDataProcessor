@@ -175,13 +175,12 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     bumpSamples = int(bumpSamples / 4) * 4
 
     # get the first quarter before the tallest spike and whatever is after
-    indices = (indice - bumpSamples / 4, indice + 3 * bumpSamples / 4)
+    indices = (indice - bumpSamples / 4, indice, indice + 3 * bumpSamples / 4)
 
     if np.isnan(accelSignal[indices[0]:indices[1]]).any():
         print 'There is at least one NaN in this bump'
 
     return indices
-
 
 def derivative(x, y, method='forward'):
     '''
@@ -422,7 +421,7 @@ def sync_error(tau, s1, s2, t):
     e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
     return e
 
-def find_timeshift(NIacc, VNacc, Fs):
+def find_timeshift(NIacc, VNacc, Fs, guess):
     '''
     Returns the timeshift (tau) of the VectorNav (VN) data relative to the
     National Instruments (NI) data based on the first 20% of the data.
@@ -435,6 +434,8 @@ def find_timeshift(NIacc, VNacc, Fs):
         The (mostly) vertical acceleration from the VectorNav.
     Fs : float or int
         Sample rate of the signals. This should be the same for each signal.
+    guess : float
+        A good guess for the time shift.
 
     Returns
     -------
@@ -462,6 +463,7 @@ def find_timeshift(NIacc, VNacc, Fs):
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
+    tau0 = guess
     tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, time))
     return tau, e
 
