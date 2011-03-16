@@ -1,0 +1,9 @@
+import DataProcessor as dp
+import numpy as np
+
+def test_unsize_vector():
+    n = 3
+    a = np.ones(n)
+    b = np.append(a, np.array([np.nan, np.nan]))
+    c = dp.unsize_vector(a, n)
+    assert a == c
