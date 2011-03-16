@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import DataProcessor as dp
 
-runid = 202
+runid = 204
 wheelbase = 1.02
 bumpLength = 1.
 
@@ -20,7 +20,7 @@ vnSig = dp.get_cell(datatable, 'AccelerationZ', runid)
 sampleRate = dp.get_cell(datatable, 'NISampleRate', runid)
 numSamples = dp.get_cell(datatable, 'NINumSamples', runid)
 speed = dp.get_cell(datatable, 'Speed', runid)
-threevolts = dp.get_cell(datatable, 'ThreeVolts', runid)
+threeVolts = dp.get_cell(datatable, 'ThreeVolts', runid)
 
 datafile.close()
 
@@ -38,18 +38,18 @@ vnBumpSig = vnSig[vnbump[0]:nibump[2]]
 guess = (nibump[1] - vnbump[1]) / float(sampleRate)
 print 'This is the guess:', guess
 
-tau, e = dp.find_timeshift(niBumpSig, vnBumpSig, sampleRate, guess)
+tau, e = dp.find_timeshift(niSig, vnSig, sampleRate, guess)
 print 'Tau:', tau
 
 plt.figure()
-plt.plot(e)
+plt.plot(e, '.')
 
 # scale
-niSig = -(niSig - threevolts/2.) / (300. / 1000.) * 9.81
+niSig = -(niSig - threeVolts / 2.) / (300. / 1000.) * 9.81
 
 # subtract the mean
-niSig = niSig - stats.nanmean(niSig)
-vnSig = vnSig - stats.nanmean(vnSig)
+#niSig = niSig - stats.nanmean(niSig)
+#vnSig = vnSig - stats.nanmean(vnSig)
 
 niBumpSig = niSig[vnbump[0]:nibump[2]]
 vnBumpSig = vnSig[vnbump[0]:nibump[2]]
@@ -61,10 +61,10 @@ plt.title('This the bump')
 
 plt.figure()
 fillx = [vnbump[0], vnbump[0], nibump[2], nibump[2]]
-filly = [-10, 10, 10, -10]
-plt.fill(fillx, filly, 'y', edgecolor='k', alpha=0.4)
-plt.plot(niSig, 'k')
+filly = [-30, 30, 30, -30]
+plt.plot(niSig, 'g')
 plt.plot(vnSig, 'b')
+plt.fill(fillx, filly, 'y', edgecolor='k', alpha=0.4)
 plt.ylim((np.nanmax(niSig) + .1, np.nanmin(niSig) - .1))
 plt.legend(['NI', 'VN'])
 plt.title('Before truncation')

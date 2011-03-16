@@ -421,17 +421,21 @@ def sync_error(tau, s1, s2, t):
     e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
     return e
 
-def find_timeshift(NIacc, VNacc, Fs, guess):
+def find_timeshift(NIacc, VNacc, Fs, guess=None):
     '''
     Returns the timeshift (tau) of the VectorNav (VN) data relative to the
-    National Instruments (NI) data based on the first 20% of the data.
+    National Instruments (NI) data.
 
     Parameters
     ----------
     NIacc : ndarray, shape(n, )
-       The (mostly) vertical acceleration from the NI box.
+       The (mostly) vertical acceleration from the NI box. Should be scaled to
+       meters per second squared.
     VNacc : ndarray, shape(n, )
-        The (mostly) vertical acceleration from the VectorNav.
+        The (mostly) vertical acceleration from the VectorNav. Should be the
+        same length as NIacc an contain the same signal albiet time shifted.
+        The VectorNav signal should be leading the NI signal.
+        Should be scaled to meters per second squared.
     Fs : float or int
         Sample rate of the signals. This should be the same for each signal.
     guess : float
@@ -439,32 +443,35 @@ def find_timeshift(NIacc, VNacc, Fs, guess):
 
     Returns
     -------
-    tau : array
-        Timeshift relative to the NI signals
+    tau : float
+        The timeshift. A positive value corresponds to the NI signal lagging the
+        VectorNav Signal.
 
     '''
 
-    # scale the data and subtract the mean
-    s1_raw = -(NIacc - 1.5) / (300. / 1000.) * 9.81
-    s2_raw = VNacc
-    s1 = s1_raw - np.mean(s1_raw[~np.isnan(s1_raw)])
-    s2 = s2_raw - np.mean(s2_raw[~np.isnan(s2_raw)])
+    # subtract the mean
+    niSig = NIacc - stats.nanmean(NIacc)
+    vnSig = VNacc - stats.nanmean(VNacc)
 
-    N = s1.shape[0]
+    N = len(niSig)
+    if N != len(vnSig):
+        raise StandardError
+
     time = np.linspace(0, N/float(Fs), N)
 
-    # Error Landscape
+    # Set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 0.5 seconds
-    tau_range = np.linspace(0., 0.5, num=Fs/2.)
-    e = np.zeros(tau_range.shape)
-    for i, item in enumerate(tau_range):
-        e[i] = sync_error(item, s1, s2, time)
+    tauRange = np.linspace(0., 0.5, num=1000)
+    e = np.zeros_like(tauRange)
+    for i, val in enumerate(tauRange):
+        e[i] = sync_error(val, s1, s2, time)
 
     # Find initial condition from landscape and optimize!
     tau0 = tau_range[np.argmin(e)]
-    tau0 = guess
     tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, time))
+
+    # if tau is not close to the other guess then say something
     return tau, e
 
 def unsize_vector(vector, m):
