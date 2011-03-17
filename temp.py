@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import DataProcessor as dp
 
-runid = 204
+runid = 145
+print "RunID:", runid
 wheelbase = 1.02
 bumpLength = 1.
 
@@ -24,41 +25,19 @@ threeVolts = dp.get_cell(datatable, 'ThreeVolts', runid)
 
 datafile.close()
 
-# find the bump in both signals
-print 'NI Signal'
-nibump =  dp.find_bump(niSig, float(sampleRate), speed, wheelbase, bumpLength)
-print nibump
-print 'VNav Signal'
-vnbump =  dp.find_bump(vnSig, float(sampleRate), speed, wheelbase, bumpLength)
-print vnbump
-
-niBumpSig = niSig[vnbump[0]:nibump[2]]
-vnBumpSig = vnSig[vnbump[0]:nibump[2]]
-
-guess = (nibump[1] - vnbump[1]) / float(sampleRate)
-print 'This is the guess:', guess
-
-tau, e = dp.find_timeshift(niSig, vnSig, sampleRate, guess)
-print 'Tau:', tau
-
-plt.figure()
-plt.plot(e, '.')
-
-# scale
+# scale the NI signal from volts to m/s**2
 niSig = -(niSig - threeVolts / 2.) / (300. / 1000.) * 9.81
 
-# subtract the mean
-#niSig = niSig - stats.nanmean(niSig)
-#vnSig = vnSig - stats.nanmean(vnSig)
+# find the bump in both signals
+print 'NI Signal'
+nibump =  dp.find_bump(niSig, sampleRate, speed, wheelbase, bumpLength)
+print nibump
 
-niBumpSig = niSig[vnbump[0]:nibump[2]]
-vnBumpSig = vnSig[vnbump[0]:nibump[2]]
+print 'VNav Signal'
+vnbump =  dp.find_bump(vnSig, sampleRate, speed, wheelbase, bumpLength)
+print vnbump
 
-plt.figure()
-plt.plot(niBumpSig)
-plt.plot(vnBumpSig)
-plt.title('This the bump')
-
+# plot the two raw signals and a shaded area for the bump
 plt.figure()
 fillx = [vnbump[0], vnbump[0], nibump[2], nibump[2]]
 filly = [-30, 30, 30, -30]
@@ -69,6 +48,27 @@ plt.ylim((np.nanmax(niSig) + .1, np.nanmin(niSig) - .1))
 plt.legend(['NI', 'VN'])
 plt.title('Before truncation')
 
+# plot only the bump
+niBumpSig = niSig[vnbump[0]:nibump[2]]
+vnBumpSig = vnSig[vnbump[0]:nibump[2]]
+
+plt.figure()
+plt.plot(niBumpSig)
+plt.plot(vnBumpSig)
+plt.title('This the bump')
+
+# get an initial guess for the time shift based on the bump indice
+guess = (nibump[1] - vnbump[1]) / float(sampleRate)
+print 'This is the guess:', guess
+
+tau, error = dp.find_timeshift(niBumpSig, vnBumpSig, sampleRate, guess=guess)
+print 'Tau:', tau
+
+# plot the error landscape
+plt.figure()
+plt.plot(np.linspace(0., .5, num=len(error)), error)
+
+# truncate the signals based on the calculated tau
 niSigTr = dp.truncate_data(niSig, 'NI', sampleRate, tau)
 vnSigTr = dp.truncate_data(vnSig, 'VN', sampleRate, tau)
 

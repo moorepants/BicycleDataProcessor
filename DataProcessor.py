@@ -129,6 +129,26 @@ class Run():
         else:
             print "No video for this run"
 
+def time_vector(numSamples, sampleRate):
+    '''Returns a time vector starting at zero.
+
+    Parameters
+    ----------
+    numSamples : int
+        Total number of samples.
+    sampleRate : int
+        Sample rate.
+
+    Returns
+    -------
+    time : ndarray, shape(numSamples, )
+        Time vector starting at zero.
+
+    '''
+    ns = float(numSamples)
+    sr = float(sampleRate)
+    return np.linspace(0., (ns - 1.) / sr, num=ns)
+
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
 
@@ -348,7 +368,7 @@ def truncate_data(series, typ, fs, tau):
 
     '''
     n = len(series)
-    t = np.linspace(0., n/fs-1./fs, num=n)
+    t = time_vector(n, fs)
 
     # shift the ni data cause it the cleaner signal
     tni = t - tau
@@ -450,29 +470,38 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None):
     '''
 
     # subtract the mean
-    niSig = NIacc - stats.nanmean(NIacc)
-    vnSig = VNacc - stats.nanmean(VNacc)
+    niSig = NIacc - sp.stats.nanmean(NIacc)
+    vnSig = VNacc - sp.stats.nanmean(VNacc)
 
     N = len(niSig)
     if N != len(vnSig):
         raise StandardError
 
-    time = np.linspace(0, N/float(Fs), N)
+    time = time_vector(N, float(Fs))
 
     # Set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 0.5 seconds
-    tauRange = np.linspace(0., 0.5, num=1000)
-    e = np.zeros_like(tauRange)
+    tauRange = np.linspace(0., .5, num=1000)
+    error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
-        e[i] = sync_error(val, s1, s2, time)
+        error[i] = sync_error(val, niSig, vnSig, time)
 
-    # Find initial condition from landscape and optimize!
-    tau0 = tau_range[np.argmin(e)]
-    tau  = fmin_bfgs(sync_error, tau0, args=(s1, s2, time))
+    # find initial condition from landscape
+    tau0 = tauRange[np.argmin(error)]
 
     # if tau is not close to the other guess then say something
-    return tau, e
+    if not guess - .1 < tau0 < guess + .1:
+        print "tau0 = %f and guess = %f" % (tau0, guess)
+        print("This tau0 may be a bad guess, check the error function!" +
+              " Using guess instead.")
+        tau0 = guess
+
+    print "Using tau0 = %f as the guess for minimization." % tau0
+
+    tau  = fmin_bfgs(sync_error, tau0, args=(niSig, vnSig, time))
+
+    return tau, error
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
