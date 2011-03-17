@@ -4,6 +4,7 @@ import re
 import tables as tab
 import numpy as np
 import scipy as sp
+from scipy.stats import nanmean
 from scipy.optimize import fmin_bfgs
 import matplotlib.pyplot as plt
 
@@ -52,14 +53,13 @@ class Run():
             # calculate tau for this run
             NIacc = get_cell(datatable, 'FrameAccelY', rownum)
             VNacc = get_cell(datatable, 'AccelerationZ', rownum)
-            tau = find_timeshift(NIacc, VNacc, Fs)
+            tau, error = find_timeshift(NIacc, VNacc, Fs)
             print 'This is tau', tau
             # store tau in the the table
             datatable.cols.tau[rownum] = tau
             datatable.flush()
         else:
             tau = curtau
-
 
         cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
                 'CalibData', 'calibdata.h5'))
@@ -470,8 +470,8 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None):
     '''
 
     # subtract the mean
-    niSig = NIacc - sp.stats.nanmean(NIacc)
-    vnSig = VNacc - sp.stats.nanmean(VNacc)
+    niSig = NIacc - nanmean(NIacc)
+    vnSig = VNacc - nanmean(VNacc)
 
     N = len(niSig)
     if N != len(vnSig):
@@ -491,7 +491,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None):
     tau0 = tauRange[np.argmin(error)]
 
     # if tau is not close to the other guess then say something
-    if not guess - .1 < tau0 < guess + .1:
+    if guess != None and not guess - .1 < tau0 < guess + .1:
         print "tau0 = %f and guess = %f" % (tau0, guess)
         print("This tau0 may be a bad guess, check the error function!" +
               " Using guess instead.")
