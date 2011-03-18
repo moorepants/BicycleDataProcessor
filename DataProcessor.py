@@ -4,7 +4,7 @@ import re
 import tables as tab
 import numpy as np
 import scipy as sp
-from scipy.stats import nanmean
+from scipy.stats import nanmean, nanmedian
 from scipy.optimize import fmin_bfgs
 import matplotlib.pyplot as plt
 
@@ -29,7 +29,7 @@ class Run():
 
         '''
 
-        # get the data table
+        # get the run data table
         datatable = datafile.root.data.datatable
 
         # these are the columns that may need to be calculated
@@ -55,6 +55,7 @@ class Run():
             VNacc = get_cell(datatable, 'AccelerationZ', rownum)
             tau, error = find_timeshift(NIacc, VNacc, Fs)
             print 'This is tau', tau
+
             # store tau in the the table
             datatable.cols.tau[rownum] = tau
             datatable.flush()
@@ -134,9 +135,9 @@ def time_vector(numSamples, sampleRate):
 
     Parameters
     ----------
-    numSamples : int
+    numSamples : int or float
         Total number of samples.
-    sampleRate : int
+    sampleRate : int or float
         Sample rate.
 
     Returns
@@ -441,7 +442,38 @@ def sync_error(tau, s1, s2, t):
     e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
     return e
 
-def find_timeshift(NIacc, VNacc, Fs, guess=None):
+def subtract_mean(sig):
+    '''
+    Subtracts the mean from a signal with nanmean.
+
+    Parameters
+    ----------
+    sig : ndarray, shape(n,)
+
+    Returns
+    -------
+    ndarray, shape(n,)
+        sig minus the mean of sig
+
+    '''
+    return sig - nanmean(sig)
+
+def normalize(sig):
+    '''
+    Normalizes the vector with respect to the maximum value.
+
+    Parameters
+    ----------
+    sig : ndarray, shape(n,)
+
+    Returns
+    -------
+    ndarray, shape(n,)
+
+    '''
+    return sig / np.nanmax(sig)
+
+def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     '''
     Returns the timeshift (tau) of the VectorNav (VN) data relative to the
     National Instruments (NI) data.
@@ -449,17 +481,19 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None):
     Parameters
     ----------
     NIacc : ndarray, shape(n, )
-       The (mostly) vertical acceleration from the NI box. Should be scaled to
-       meters per second squared.
+        The (mostly) vertical acceleration from the NI box. This can be raw
+        voltage or scaled signals.
     VNacc : ndarray, shape(n, )
         The (mostly) vertical acceleration from the VectorNav. Should be the
         same length as NIacc an contain the same signal albiet time shifted.
         The VectorNav signal should be leading the NI signal.
-        Should be scaled to meters per second squared.
     Fs : float or int
         Sample rate of the signals. This should be the same for each signal.
     guess : float
-        A good guess for the time shift.
+        A extra guess for the time shift if you have more insight.
+    sign : boolean
+        True means the signs of the two signals are opposite, False means they
+        are the same.
 
     Returns
     -------
@@ -468,10 +502,12 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None):
         VectorNav Signal.
 
     '''
+    if sign:
+        NIacc = -NIacc
 
-    # subtract the mean
-    niSig = NIacc - nanmean(NIacc)
-    vnSig = VNacc - nanmean(VNacc)
+    # subtract the mean and normalize both signals
+    niSig = normalize(subtract_mean(NIacc))
+    vnSig = normalize(subtract_mean(VNacc))
 
     N = len(niSig)
     if N != len(vnSig):

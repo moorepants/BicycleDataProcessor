@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import DataProcessor as dp
 
-runid = 147
+runid = 123
 print "RunID:", runid
 wheelbase = 1.02
 bumpLength = 1.
@@ -16,8 +16,8 @@ datafile = tab.openFile('InstrumentedBicycleData.h5')
 datatable = datafile.root.data.datatable
 
 # get some data
-niSig = dp.get_cell(datatable, 'FrameAccelY', runid)
-vnSig = dp.get_cell(datatable, 'AccelerationZ', runid)
+niAcc = dp.get_cell(datatable, 'FrameAccelY', runid)
+vnAcc = dp.get_cell(datatable, 'AccelerationZ', runid)
 sampleRate = dp.get_cell(datatable, 'NISampleRate', runid)
 numSamples = dp.get_cell(datatable, 'NINumSamples', runid)
 speed = dp.get_cell(datatable, 'Speed', runid)
@@ -26,7 +26,8 @@ threeVolts = dp.get_cell(datatable, 'ThreeVolts', runid)
 datafile.close()
 
 # scale the NI signal from volts to m/s**2
-niSig = -(niSig - threeVolts / 2.) / (300. / 1000.) * 9.81
+niSig = -(niAcc - threeVolts / 2.) / (300. / 1000.) * 9.81
+vnSig = vnAcc
 
 # find the bump in both signals
 print 'NI Signal'
@@ -61,7 +62,7 @@ plt.title('This the bump')
 guess = (nibump[1] - vnbump[1]) / float(sampleRate)
 print 'This is the guess:', guess
 
-tau, error = dp.find_timeshift(niBumpSig, vnBumpSig, sampleRate, guess=guess)
+tau, error = dp.find_timeshift(niAcc, vnAcc, sampleRate, guess=guess)
 print 'Tau:', tau
 
 # plot the error landscape
