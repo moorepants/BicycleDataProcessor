@@ -5,7 +5,8 @@ import tables as tab
 import numpy as np
 import scipy as sp
 from scipy.stats import nanmean, nanmedian
-from scipy.optimize import fmin_bfgs
+from scipy.optimize import fmin_bfgs, fmin, fmin_powell
+from scipy.signal import butter, lfilter
 import matplotlib.pyplot as plt
 
 class Run():
@@ -518,7 +519,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     # Set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 0.5 seconds
-    tauRange = np.linspace(0., .5, num=1000)
+    tauRange = np.linspace(0., .5, num=500)
     error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
         error[i] = sync_error(val, niSig, vnSig, time)
@@ -526,18 +527,64 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     # find initial condition from landscape
     tau0 = tauRange[np.argmin(error)]
 
+    print "tau0 = %f and guess = %f" % (tau0, guess)
+
     # if tau is not close to the other guess then say something
     if guess != None and not guess - .1 < tau0 < guess + .1:
-        print "tau0 = %f and guess = %f" % (tau0, guess)
         print("This tau0 may be a bad guess, check the error function!" +
               " Using guess instead.")
         tau0 = guess
 
     print "Using tau0 = %f as the guess for minimization." % tau0
 
-    tau  = fmin_bfgs(sync_error, tau0, args=(niSig, vnSig, time))
+    tau  = fmin(sync_error, tau0, args=(niSig, vnSig, time))
+
+    print "This is what came out of the minimization:", tau
+
+    # if the minimization doesn't do a good job, just use the tau0
+    if np.abs(tau - tau0) > 0.01:
+        print "Bad minimizer!!"
+        tau = tau0
 
     return tau, error
+
+def butterworth(data, freq, samprate, order=2, axis=-1):
+    """
+    Returns the Butterworth filtered data set.
+
+    Parameters:
+    -----------
+    data : ndarray
+    freq : float
+        cutoff frequency in hertz
+    samprate : float
+        sampling rate in hertz
+    order : int
+        the order of the Butterworth filter
+    axis : int
+        the axis to filter along
+
+    Returns:
+    --------
+    FilteredData : ndarray
+        filtered version of data
+
+    This does a forward and backward Butterworth filter and averages the two.
+
+    """
+    nDim = len(data.shape)
+    dataSlice = '['
+    for dim in range(nDim):
+        if dim == axis or (np.sign(axis) == -1 and dim == nDim + axis):
+            dataSlice = dataSlice + '::-1, '
+        else:
+            dataSlice = dataSlice + ':, '
+    dataSlice = dataSlice[:-2] + '].copy()'
+
+    b, a = butter(order, freq/samprate/2.)
+    forwardFilter = lfilter(b, a, data, axis=axis)
+    reverseFilter = lfilter(b, a, eval('data' + dataSlice), axis=axis)
+    return(forwardFilter + eval('reverseFilter' + dataSlice))/2.
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
