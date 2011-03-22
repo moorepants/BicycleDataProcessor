@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import tables as tab
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +8,7 @@ from scipy.interpolate import UnivariateSpline
 import DataProcessor as dp
 
 # pick a run number
-runid = 125
+runid = 109
 print "RunID:", runid
 
 # open the data file
@@ -33,6 +34,11 @@ time = dp.time_vector(numSamples, sampleRate)
 niSig = -(niAcc - threeVolts / 2.) / (300. / 1000.) * 9.81
 vnSig = vnAcc
 
+# see if there are nan's in the vnSig
+if np.isnan(vnAcc).any():
+    nanI = np.nonzero(np.isnan(vnAcc))[0]
+    print "This run has %d nan's at indices:" % len(nanI), nanI
+
 # some constants for find_bump
 wheelbase = 1.02
 bumpLength = 1.
@@ -55,12 +61,13 @@ print vnbump
 
 # plot the filtered signals
 plt.figure()
-plt.plot(time, filNiSig, '-', time, niSig, '.')
-plt.plot(time, filVnSig, '-', time, vnSig, '.')
+plt.plot(time, filNiSig, '-') #, time, niSig, '.')
+plt.plot(time, filVnSig, '-') #, time, vnSig, '.')
 plt.xlabel('Time [sec]')
 plt.ylabel('Acceleration') # [$\frac{m}{s^2}$]')
 plt.title('Filtered Signals')
-plt.legend(('NI Filterd', 'NI', 'VN Filtered', 'VN'))
+plt.legend(('NI Filterd', 'VN Filtered'))
+#plt.legend(('NI Filterd', 'NI', 'VN Filtered', 'VN'))
 
 # plot the two raw signals and a shaded area for the bump
 plt.figure()
@@ -88,7 +95,6 @@ plt.title('This the bump')
 guess = (nibump[1] - vnbump[1]) / float(sampleRate)
 
 tau, error = dp.find_timeshift(niAcc, vnAcc, sampleRate, guess=guess)
-print 'Tau:', tau
 
 # plot the error landscape
 plt.figure()

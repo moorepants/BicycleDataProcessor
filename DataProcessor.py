@@ -1,11 +1,12 @@
 #!/usr/bin/env python
+
 import os
 import re
 import tables as tab
 import numpy as np
 import scipy as sp
 from scipy.stats import nanmean, nanmedian
-from scipy.optimize import fmin_bfgs, fmin, fmin_powell
+from scipy.optimize import fmin
 from scipy.signal import butter, lfilter
 import matplotlib.pyplot as plt
 
@@ -269,7 +270,8 @@ def pad_with_zeros(num, digits):
     return num
 
 def linear_calib(V, calibdata):
-    '''Linear tranformation from raw voltage measurements (V) to calibrated
+    '''
+    Linear tranformation from raw voltage measurements (V) to calibrated
     data signals (s).
 
     Parameters
@@ -373,7 +375,7 @@ def truncate_data(series, typ, fs, tau):
     n = len(series)
     t = time_vector(n, fs)
 
-    # shift the ni data cause it the cleaner signal
+    # shift the ni data cause it is the cleaner signal
     tni = t - tau
     tvn = t
 
@@ -394,7 +396,7 @@ def get_row_num(runid, table):
     Parameters
     ----------
     runid : int or string
-   The run id.
+        The run id.
     table : pytable
         The run data table.
 
@@ -470,7 +472,8 @@ def normalize(sig):
 
     Returns
     -------
-    ndarray, shape(n,)
+    normSig : ndarray, shape(n,)
+        The signal normalized with respect to the maximum value.
 
     '''
     return sig / np.nanmax(sig)
@@ -484,7 +487,8 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     ----------
     NIacc : ndarray, shape(n, )
         The (mostly) vertical acceleration from the NI box. This can be raw
-        voltage or scaled signals.
+        voltage or scaled signals. Be sure to set sign to False if the signals
+        have been scaled already.
     VNacc : ndarray, shape(n, )
         The (mostly) vertical acceleration from the VectorNav. Should be the
         same length as NIacc an contain the same signal albiet time shifted.
@@ -503,15 +507,19 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
         The timeshift. A positive value corresponds to the NI signal lagging the
         VectorNav Signal.
 
+    error : ndarray, shape(500,)
+        Error versus tau.
+
     '''
+    # the NIaccY is the negative of the VNaccZ
     if sign:
         NIacc = -NIacc
-
 
     # subtract the mean and normalize both signals
     niSig = normalize(subtract_mean(NIacc))
     vnSig = normalize(subtract_mean(VNacc))
 
+    # raise an error if the signals are not the same length
     N = len(niSig)
     if N != len(vnSig):
         raise StandardError
@@ -529,7 +537,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     # find initial condition from landscape
     tau0 = tauRange[np.argmin(error)]
 
-    print "tau0 = %f and guess = %f" % (tau0, guess)
+    print "The minimun of the error landscape is %f and the provided guess is %f" % (tau0, guess)
 
     # if tau is not close to the other guess then say something
     isNone = guess == None
@@ -541,16 +549,16 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
               " Using guess instead.")
         tau0 = guess
 
-    print "Using tau0 = %f as the guess for minimization." % tau0
+    print "Using %f as the guess for minimization." % tau0
 
-    tau  = fmin(sync_error, tau0, args=(niSig, vnSig, time))
+    tau  = fmin(sync_error, tau0, args=(niSig, vnSig, time))[0]
 
     print "This is what came out of the minimization:", tau
 
     # if the minimization doesn't do a good job, just use the tau0
     if np.abs(tau - tau0) > 0.01:
-        print "Bad minimizer!!"
         tau = tau0
+        print "Bad minimizer!! Using the guess, %f, instead." % tau
 
     return tau, error
 
@@ -561,9 +569,9 @@ def butterworth(data, freq, samprate, order=2, axis=-1):
     Parameters:
     -----------
     data : ndarray
-    freq : float
+    freq : float or int
         cutoff frequency in hertz
-    samprate : float
+    sampRate : float or int
         sampling rate in hertz
     order : int
         the order of the Butterworth filter
@@ -572,7 +580,7 @@ def butterworth(data, freq, samprate, order=2, axis=-1):
 
     Returns:
     --------
-    FilteredData : ndarray
+    filteredData : ndarray
         filtered version of data
 
     This does a forward and backward Butterworth filter and averages the two.
@@ -587,10 +595,10 @@ def butterworth(data, freq, samprate, order=2, axis=-1):
             dataSlice = dataSlice + ':, '
     dataSlice = dataSlice[:-2] + '].copy()'
 
-    b, a = butter(order, freq/samprate/2.)
+    b, a = butter(order, float(freq) / float(sampRate) / 2.)
     forwardFilter = lfilter(b, a, data, axis=axis)
     reverseFilter = lfilter(b, a, eval('data' + dataSlice), axis=axis)
-    return(forwardFilter + eval('reverseFilter' + dataSlice))/2.
+    return(forwardFilter + eval('reverseFilter' + dataSlice)) / 2.
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
@@ -657,6 +665,7 @@ def fill_table(datafile):
     ----------
     datafile : string
         path to the main hdf5 file: InstrumentedBicycleData.h5
+
     '''
 
     # load the files from the ../BicycleDAQ/data/h5 directory
@@ -713,7 +722,8 @@ def create_database():
     data.close()
 
 def create_run_table_class(filteredrun, unfilteredrun):
-    '''Generates a class that is used for the table description for raw data
+    '''
+    Returns a class that is used for the table description for raw data
     for each run.
 
     Parameters
