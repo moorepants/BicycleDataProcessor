@@ -132,7 +132,8 @@ class Run():
             print "No video for this run"
 
 def time_vector(numSamples, sampleRate):
-    '''Returns a time vector starting at zero.
+    '''
+    Returns a time vector starting at zero.
 
     Parameters
     ----------
@@ -506,6 +507,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     if sign:
         NIacc = -NIacc
 
+
     # subtract the mean and normalize both signals
     niSig = normalize(subtract_mean(NIacc))
     vnSig = normalize(subtract_mean(VNacc))
@@ -530,7 +532,11 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
     print "tau0 = %f and guess = %f" % (tau0, guess)
 
     # if tau is not close to the other guess then say something
-    if guess != None and not guess - .1 < tau0 < guess + .1:
+    isNone = guess == None
+    isInRange = 0. < guess < 1.
+    isCloseToTau = guess - .1 < tau0 < guess + .1
+
+    if not isNone and isInRange and not isCloseToTau:
         print("This tau0 may be a bad guess, check the error function!" +
               " Using guess instead.")
         tau0 = guess

@@ -3,20 +3,19 @@ import tables as tab
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
-from scipy.interpolate import UnivariateSpline, interp1d
+from scipy.interpolate import UnivariateSpline
 import DataProcessor as dp
 
-runid = 108
+# pick a run number
+runid = 125
 print "RunID:", runid
-wheelbase = 1.02
-bumpLength = 1.
 
 # open the data file
 datafile = tab.openFile('InstrumentedBicycleData.h5')
 
 datatable = datafile.root.data.datatable
 
-# get some data
+# get the raw data
 niAcc = dp.get_cell(datatable, 'FrameAccelY', runid)
 vnAcc = dp.get_cell(datatable, 'AccelerationZ', runid)
 sampleRate = dp.get_cell(datatable, 'NISampleRate', runid)
@@ -27,14 +26,20 @@ threeVolts = dp.get_cell(datatable, 'ThreeVolts', runid)
 # close the file
 datafile.close()
 
+# make a nice time vector
 time = dp.time_vector(numSamples, sampleRate)
 
-# scale the NI signal from volts to m/s**2
+# scale the NI signal from volts to m/s**2, and switch the sign
 niSig = -(niAcc - threeVolts / 2.) / (300. / 1000.) * 9.81
 vnSig = vnAcc
 
-filNiSig = dp.butterworth(niSig, 50., float(sampleRate))
-# find the bump
+# some constants for find_bump
+wheelbase = 1.02
+bumpLength = 1.
+cutoff = 50.
+# filter the NI Signal
+filNiSig = dp.butterworth(niSig, cutoff, float(sampleRate))
+# find the bump of the filter NI signal
 nibump =  dp.find_bump(filNiSig, sampleRate, speed, wheelbase, bumpLength)
 print 'NI Signal'
 print nibump
@@ -42,21 +47,28 @@ print nibump
 # remove the nan's
 v = vnSig[np.nonzero(np.isnan(vnSig)==False)]
 t = time[np.nonzero(np.isnan(vnSig)==False)]
-vn_spline = interp1d(t, v, kind='cubic')
-plt.figure()
-plt.plot(time, vn_spline(time))
-plt.show()
-filVnSig = dp.butterworth(vn_spline(time), 50., float(sampleRate))
+vn_spline = UnivariateSpline(t, v, k=3, s=0)
+filVnSig = dp.butterworth(vn_spline(time), cutoff, float(sampleRate))
 vnbump =  dp.find_bump(filVnSig, sampleRate, speed, wheelbase, bumpLength)
 print 'VNav Signal'
 print vnbump
 
+# plot the filtered signals
+plt.figure()
+plt.plot(time, filNiSig, '-', time, niSig, '.')
+plt.plot(time, filVnSig, '-', time, vnSig, '.')
+plt.xlabel('Time [sec]')
+plt.ylabel('Acceleration') # [$\frac{m}{s^2}$]')
+plt.title('Filtered Signals')
+plt.legend(('NI Filterd', 'NI', 'VN Filtered', 'VN'))
+
 # plot the two raw signals and a shaded area for the bump
 plt.figure()
-fillx = [vnbump[0], vnbump[0], nibump[2], nibump[2]]
+fillx = [time[vnbump[0]], time[vnbump[0]],
+         time[nibump[2]], time[nibump[2]]]
 filly = [-30, 30, 30, -30]
-plt.plot(filNiSig)
-plt.plot(vnSig)
+plt.plot(time, niSig)
+plt.plot(time, vnSig)
 plt.fill(fillx, filly, 'y', edgecolor='k', alpha=0.4)
 plt.ylim((np.nanmax(niSig) + .1, np.nanmin(niSig) - .1))
 plt.legend(['NI', 'VN'])
@@ -65,6 +77,7 @@ plt.title('Before truncation')
 # plot only the bump
 niBumpSig = niSig[vnbump[0]:nibump[2]]
 vnBumpSig = vnSig[vnbump[0]:nibump[2]]
+timeBump = time[vnbump[0]:nibump[2]]
 
 plt.figure()
 plt.plot(niBumpSig)
@@ -87,10 +100,12 @@ plt.xlabel('Tau')
 niSigTr = dp.truncate_data(niSig, 'NI', sampleRate, tau)
 vnSigTr = dp.truncate_data(vnSig, 'VN', sampleRate, tau)
 
+timeTr = dp.time_vector(len(niSigTr), sampleRate)
+
 # plot the truncated data
 plt.figure()
-plt.plot(niSigTr)
-plt.plot(vnSigTr)
+plt.plot(timeTr, niSigTr)
+plt.plot(timeTr, vnSigTr)
 plt.legend(['NI', 'VN'])
 plt.title('After truncation')
 
