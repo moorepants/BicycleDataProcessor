@@ -44,17 +44,17 @@ wheelbase = 1.02
 bumpLength = 1.
 cutoff = 50.
 # filter the NI Signal
-filNiSig = dp.butterworth(niSig, cutoff, float(sampleRate))
+filNiSig = dp.butterworth(niSig, cutoff, sampleRate)
 # find the bump of the filter NI signal
 nibump =  dp.find_bump(filNiSig, sampleRate, speed, wheelbase, bumpLength)
 print 'NI Signal'
 print nibump
 
 # remove the nan's
-v = vnSig[np.nonzero(np.isnan(vnSig)==False)]
-t = time[np.nonzero(np.isnan(vnSig)==False)]
+v = vnSig[np.nonzero(np.isnan(vnSig) == False)]
+t = time[np.nonzero(np.isnan(vnSig) == False)]
 vn_spline = UnivariateSpline(t, v, k=3, s=0)
-filVnSig = dp.butterworth(vn_spline(time), cutoff, float(sampleRate))
+filVnSig = dp.butterworth(vn_spline(time), cutoff, sampleRate)
 vnbump =  dp.find_bump(filVnSig, sampleRate, speed, wheelbase, bumpLength)
 print 'VNav Signal'
 print vnbump
@@ -93,6 +93,22 @@ plt.title('This the bump')
 
 # get an initial guess for the time shift based on the bump indice
 guess = (nibump[1] - vnbump[1]) / float(sampleRate)
+
+# get the range around the bump that is not polluted with nan's
+vnbump[1]
+# nanI can have no values, 1 value or several values
+if len(nanI) == 0:
+    vnWithoutNan = vnAcc
+    niWithoutNan = niAcc
+elif len(nanI) = 1:
+
+def split_signal(sig):
+    # find out the nan indices
+    if not np.isnan(sig).any():
+        return sig
+    else:
+        nanI = np.nonzero(np.isnan(vnAcc))[0]
+
 
 tau, error = dp.find_timeshift(niAcc, vnAcc, sampleRate, guess=guess)
 

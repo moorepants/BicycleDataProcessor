@@ -154,7 +154,8 @@ def time_vector(numSamples, sampleRate):
     return np.linspace(0., (ns - 1.) / sr, num=ns)
 
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
-    '''Returns the indices that surround the bump in the acceleration signal.
+    '''
+    Returns the indices that surround the bump in the acceleration signal.
 
     Parameters
     ----------
@@ -214,7 +215,7 @@ def derivative(x, y, method='forward'):
     -----------
     x : ndarray, shape(n,)
     y : ndarray, shape(n,)
-    type : string
+    method : string
         'forward' : forward difference
         'central' : central difference
         'backward' : backward difference
@@ -246,7 +247,7 @@ def derivative(x, y, method='forward'):
     elif method == 'central':
         print 'There is no central difference method defined, want to write one?'
     else:
-        print 'There is no sure method here! Try Again'
+        print 'There is no %s method here! Try Again' % method
 
 def pad_with_zeros(num, digits):
     '''
@@ -562,7 +563,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
 
     return tau, error
 
-def butterworth(data, freq, samprate, order=2, axis=-1):
+def butterworth(data, freq, sampRate, order=2, axis=-1):
     """
     Returns the Butterworth filtered data set.
 
