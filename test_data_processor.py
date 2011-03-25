@@ -15,16 +15,25 @@ def test_time_vector():
     assert (time == np.linspace(0., 2. - 1. / 50., num=100)).all()
 
 def test_split_around_nan():
-    # 1 to 25
-    a = np.arange(1, 26)
-    for i in [0, 5, 20, 24]:
-        a[i] = np.nan
-    arrays, indices = split_around_nan(a)
-    assert arrays[0] = a[1:5]
-    assert arrays[1] = a[6:20]
-    assert arrays[2] = a[21:24]
-    assert indices[0] = (0, 0)
-    assert indices[1] = (6, 20)
-    assert indices[2] = (21, 24)
-
-
+    # build an array of length 25 with some nan values
+    a = np.ones(25) * np.nan
+    b = np.arange(25)
+    for i in b:
+        if i not in [0, 5, 20, 24]:
+            a[i] = b[i]
+    # run the function and test the results
+    indices, arrays = dp.split_around_nan(a)
+    assert indices[0] == (1, 5)
+    assert indices[1] == (6, 20)
+    assert indices[2] == (21, 24)
+    # build an array of length 25 with some nan values
+    a = np.ones(25) * np.nan
+    b = np.arange(25)
+    for i in b:
+        if i not in [5, 20]:
+            a[i] = b[i]
+    # run the function and test the results
+    indices, arrays = dp.split_around_nan(a)
+    assert indices[0] == (0, 5)
+    assert indices[1] == (6, 20)
+    assert indices[2] == (21, 25)
