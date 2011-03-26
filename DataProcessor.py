@@ -176,14 +176,10 @@ def split_around_nan(sig):
         for i in range(numSecs):
             # if it is the first section
             if i == range(numSecs)[0]:
-                if not nanAtFirst and not nanAtLast:
-                    indices.append((0, nanIndices[i]))
-                elif nanAtFirst and not nanAtLast:
+                if nanAtFirst:
                     indices.append((1, nanIndices[i + 1]))
-                elif not nanAtFirst and nanAtLast:
+                elif not nanAtFirst:
                     indices.append((0, nanIndices[i]))
-                elif nanAtFirst and nanAtLast:
-                    indices.append((1, nanIndices[i + 1]))
             # if it is the last section
             elif i == range(numSecs)[-1]:
                 if not nanAtFirst and not nanAtLast:
@@ -205,51 +201,12 @@ def split_around_nan(sig):
                 elif nanAtFirst and nanAtLast:
                     indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
 
-
-            if not nanAtFirst and not nanAtLast:
-                # if it is the first section
-                if i == range(numSecs)[0]:
-                    indices.append((0, nanIndices[i]))
-                # if it is the last section
-                elif i == range(numSecs)[-1]:
-                    indices.append((nanIndices[i - 1] + 1, len(sig)))
-                # else it is a middle section
-                else:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-            elif nanAtFirst and not nanAtLast:
-                if i == range(numSecs)[0]:
-                    indices.append((1, nanIndices[i + 1]))
-                elif i == range(numSecs)[-1]:
-                    indices.append((nanIndices[i] + 1, len(sig)))
-                else:
-                    indices.append((nanIndices[i] + 1, nanIndices[i + 1]))
-            elif not nanAtFirst and nanAtLast:
-                # if it is the first section
-                if i == range(numSecs)[0]:
-                    indices.append((0, nanIndices[i]))
-                # if it is the last section
-                elif i == range(numSecs)[-1]:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-                # else it is a middle section
-                else:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-            elif nanAtFirst and nanAtLast:
-                # if it is the first section
-                if i == range(numSecs)[0]:
-                    indices.append((1, nanIndices[i + 1]))
-                # if it is the last section
-                elif i == range(numSecs)[-1]:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-                # else it is a middle section
-                else:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
             arrays.append(sig[indices[i][0]:indices[i][1]])
             print indices
     else:
         arrays, indices = [sig], [(0, len(sig))]
 
     return indices, arrays
-
 
 def time_vector(numSamples, sampleRate):
     '''
