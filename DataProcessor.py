@@ -151,58 +151,19 @@ def split_around_nan(sig):
     '''
     # if there are any nans then split the signal
     if np.isnan(sig).any():
-        # find the nans
-        nanIndices = np.nonzero(np.isnan(sig))[0]
-
-        nanAtFirst = nanIndices[0] == 0
-        nanAtLast = nanIndices[-1] == len(sig) - 1
-        # if there is a nan at the first and last position
-        if nanAtFirst and nanAtLast:
-            numSecs = len(nanIndices) - 1
-        # if there is a nan at the first
-        if nanAtFirst and not nanAtLast:
-            numSecs = len(nanIndices)
-        # if there is a nan at the last
-        if not nanAtFirst and not nanAtLast:
-            numSecs = len(nanIndices)
-        # if there are not nans at the first or last
-        else:
-            numSecs = len(nanIndices) + 1
-
-        print "Number of sections:", numSecs
-
-        indices = []
+        firstSplit = np.split(sig, np.nonzero(np.isnan(sig))[0])
         arrays = []
-        for i in range(numSecs):
-            # if it is the first section
-            if i == range(numSecs)[0]:
-                if nanAtFirst:
-                    indices.append((1, nanIndices[i + 1]))
-                elif not nanAtFirst:
-                    indices.append((0, nanIndices[i]))
-            # if it is the last section
-            elif i == range(numSecs)[-1]:
-                if not nanAtFirst and not nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, len(sig)))
-                elif nanAtFirst and not nanAtLast:
-                    indices.append((nanIndices[i] + 1, len(sig)))
-                elif not nanAtFirst and nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-                elif nanAtFirst and nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-            # else it is a middle section
+        for arr in firstSplit:
+            # if the array has nans, then split it again
+            if np.isnan(arr).any():
+                arrays = arrays + np.split(arr, np.nonzero(np.isnan(arr))[0] + 1)
+            # if it doesn't have nans, then just add it as is
             else:
-                if not nanAtFirst and not nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-                elif nanAtFirst and not nanAtLast:
-                    indices.append((nanIndices[i] + 1, nanIndices[i + 1]))
-                elif not nanAtFirst and nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-                elif nanAtFirst and nanAtLast:
-                    indices.append((nanIndices[i - 1] + 1, nanIndices[i]))
-
-            arrays.append(sig[indices[i][0]:indices[i][1]])
-            print indices
+                arrays.append(arr)
+        # remove any empty arrays
+        emptys = [i for i, arr in enumerate(arrays) if arr.shape[0] == 0]
+        arrays = [arr for i, arr in enumerate(arrays) if i not in emptys]
+        indices = []
     else:
         arrays, indices = [sig], [(0, len(sig))]
 
