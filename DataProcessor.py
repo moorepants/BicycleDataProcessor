@@ -134,19 +134,24 @@ class Run():
 
 def split_around_nan(sig):
     '''
-    Returns a list of arrays and the indices in between nan values.
+    Returns the sections of an array not polluted with nans.
 
     Parameters
     ----------
     sig : ndarray, shape(n,)
-        A one dimensional array.
+        A one dimensional array that may or may not contain m nan values where
+        0 <= m <= n.
 
     Returns
     -------
-    indices : list
-        List of tuples.
-    arrays : list
-        List of arrays.
+    indices : list, len(indices) = k
+        List of tuples containing the indices for the sections of the array.
+    arrays : list, len(indices) = k
+        List of section arrays. All arrays of nan values are of dimension 1.
+
+    k = number of non-nan sections + number of nans
+
+    sig[indices[k][0]:indices[k][1]] == arrays[k]
 
     '''
     # if there are any nans then split the signal
