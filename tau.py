@@ -8,7 +8,7 @@ from scipy.interpolate import UnivariateSpline
 import DataProcessor as dp
 
 # pick a run number
-runid = 109
+runid = 156
 print "RunID:", runid
 
 # open the data file
@@ -87,30 +87,31 @@ vnBumpSig = vnSig[vnbump[0]:nibump[2]]
 timeBump = time[vnbump[0]:nibump[2]]
 
 plt.figure()
-plt.plot(niBumpSig)
-plt.plot(vnBumpSig)
+plt.plot(timeBump, niBumpSig)
+plt.plot(timeBump, vnBumpSig)
 plt.title('This the bump')
 
 # get an initial guess for the time shift based on the bump indice
 guess = (nibump[1] - vnbump[1]) / float(sampleRate)
 
-# get the range around the bump that is not polluted with nan's
-vnbump[1]
-# nanI can have no values, 1 value or several values
-if len(nanI) == 0:
-    vnWithoutNan = vnAcc
-    niWithoutNan = niAcc
-elif len(nanI) = 1:
+# find the section that the bump belongs to
+indices, arrays = dp.split_around_nan(vnAcc)
+for pair in indices:
+    if pair[0] <= vnbump[1] < pair[1]:
+        bSec = pair
 
-def split_signal(sig):
-    # find out the nan indices
-    if not np.isnan(sig).any():
-        return sig
-    else:
-        nanI = np.nonzero(np.isnan(vnAcc))[0]
+# plot the bump section
+niBumpSec = niSig[bSec[0]:bSec[1]]
+vnBumpSec = vnSig[bSec[0]:bSec[1]]
+timeBumpSec = time[bSec[0]:bSec[1]]
 
+plt.figure()
+plt.plot(timeBumpSec, niBumpSec)
+plt.plot(timeBumpSec, vnBumpSec)
+plt.title('This the bump section')
 
-tau, error = dp.find_timeshift(niAcc, vnAcc, sampleRate, guess=guess)
+tau, error = dp.find_timeshift(niAcc[bSec[0]:bSec[1]], vnAcc[bSec[0]:bSec[1]],
+                               sampleRate, guess=guess)
 
 # plot the error landscape
 plt.figure()
@@ -130,19 +131,5 @@ plt.plot(timeTr, niSigTr)
 plt.plot(timeTr, vnSigTr)
 plt.legend(['NI', 'VN'])
 plt.title('After truncation')
-
-#### plot the difference to see if you can see the point at which the nan's
-#### potentially shift the data
-###plt.figure()
-###plt.plot(niSigTr-vnSigTr)
-###plt.title('Difference in the two signals')
-###
-###t = np.linspace(0., numSamples/sampleRate, num=numSamples)
-###dNdt = dp.derivative(t, niSig, method='combination')
-###
-#### plot the derivative of the ni sig
-###plt.figure()
-###plt.plot(t, dNdt)
-###plt.title('Derivative of the NI Signal')
 
 plt.show()
