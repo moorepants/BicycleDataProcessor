@@ -134,7 +134,7 @@ class Run():
 
 def split_around_nan(sig):
     '''
-    Returns a list of arrays and the indices inbetween nan values.
+    Returns a list of arrays and the indices in between nan values.
 
     Parameters
     ----------
@@ -163,7 +163,15 @@ def split_around_nan(sig):
         # remove any empty arrays
         emptys = [i for i, arr in enumerate(arrays) if arr.shape[0] == 0]
         arrays = [arr for i, arr in enumerate(arrays) if i not in emptys]
+        # build the indices list
         indices = []
+        count = 0
+        for i, arr in enumerate(arrays):
+            count += len(arr)
+            if np.isnan(arr).any():
+                indices.append((count - 1, count))
+            else:
+                indices.append((count - len(arr), count))
     else:
         arrays, indices = [sig], [(0, len(sig))]
 
