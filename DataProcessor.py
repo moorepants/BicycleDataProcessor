@@ -2,6 +2,7 @@
 
 import os
 import re
+from operator import xor
 import tables as tab
 import numpy as np
 import scipy as sp
@@ -827,12 +828,14 @@ def create_run_table_class(filteredrun, unfilteredrun):
 
     return RunTable
 
-def parse_vnav_string(vnstr, remove=0):
-    '''Gets the good info from a VNav string
+def parse_vnav_string(vnStr):
+    '''
+    Returns a list of the information in a VN-100 text string and whether the
+    checksum failed.
 
     Parameters
     ----------
-    vnstr : string
+    vnStr : string
         A string from the VectorNav serial output.
     remove : int
         Specifies how many values to remove from the beginning of the output
@@ -842,18 +845,65 @@ def parse_vnav_string(vnstr, remove=0):
     -------
     vnlist : list
         A list of each element in the VectorNav string.
-        ['VNWRG', '26', ..., ..., ...]
+        ['VNWRG', '26', ..., ..., ..., checksum]
+    chkPass : boolean
+        True if the checksum is correct and false if it isn't.
+    vnrrg : boolean
+        True if the str is a register reading, false if it is an async
+        reading, and None if chkPass is false.
 
     '''
+    # calculate the checksum of the raw string
+    calcChkSum = vnav_checksum(vnStr)
     # get rid of the $ and the *checksum
-    vnstr = re.sub('\$(.*)\*.*', r'\1', vnstr)
-    # make it a list
-    vnlist = vnstr.split(',')
-    # return the last values with regards to remove
-    return vnlist[remove:]
+    vnMeat = re.sub('''(?x) # verbose
+                      \$ # match the dollar sign at the beginning
+                      (.*) # this is the content
+                      \* # match the asterisk
+                      (\w*) # the checksum
+                      \s* # the newline characters''', r'\1,\2', vnStr)
+    # make it a list the last item should be the checksum
+    vnList = vnMeat.split(',')
+    # set the vnrrg flag
+    if vnList[0] == 'VNRRG':
+        vnrrg = True
+    else:
+        vnrgg = False
+    # see if the checksum passes
+    chkPass = calcChkSum == vnList[-1]
+    if not chkPass:
+        print "Checksum failed"
+        print vnStr
+        vnrrg = None
+    # return the list and whether or not the checksum failed
+    return vnList, chkPass, vnrrg
+
+def vnav_checksum(vnStr):
+    '''
+    Returns the checksum in hex for the VN-100 string.
+
+    Parameters
+    ----------
+    vnStr : string
+        Of the form '$...*X' where X is the two digit checksum.
+    Returns
+    -------
+    chkSum : string
+        Two digit hex representation of the checksum.
+
+    '''
+    chkStr = re.sub('''(?x) # verbose
+                       \$ # match the dollar sign
+                       (.*) # match the stuff the checksum is calculated from
+                       \* # match the asterisk
+                       \w* # the checksum
+                       \s* # the newline characters''', r'\1', vnStr)
+    checksum = reduce(xor, map(ord, chkStr))
+    return hex(checksum)[2:]
 
 def get_run_data(pathtofile):
-    '''Returns data from the run h5 files using pytables and formats it better
+    '''
+    Returns data from the run h5 files using pytables and formats it better
     for python.
 
     Parameters

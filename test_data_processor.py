@@ -55,3 +55,49 @@ def test_split_around_nan():
     assert indices[3] == (5, 6)
     assert indices[4] == (6, 8)
     assert indices[5] == (8, 9)
+
+def test_parse_vnav_string():
+    strings = []
+    # this is an example output from a read register (VNRRG) command
+    s = ('$VNRRG,' +
+         '252,' +
+         '+2.088900E-01,-5.476115E-01,-1.835284E+00,' +
+         '+2.077137E-02,+3.030512E-01,-9.876616E+00,' +
+         '+7.808615E-02,+9.382707E-02,+1.179649E-02,' + 
+         '+2.099097E+01*45\r\n')
+    vnList, chkPass, vnrrg = dp.parse_vnav_string(s)
+    l = ['VNRRG', '252',
+         '+2.088900E-01', '-5.476115E-01', '-1.835284E+00',
+         '+2.077137E-02', '+3.030512E-01', '-9.876616E+00',
+         '+7.808615E-02', '+9.382707E-02', '+1.179649E-02', 
+         '+2.099097E+01']
+    assert vnList == l
+    assert chkPass
+    assert vnrrg
+    # this is another VNRRG example with a string instead of floats
+    strings.append('$VNRRG,03,067200383733335843046264*58\r\n')
+
+    # this is an example of an asyn output
+    strings.append('$VNCMV,' + 
+                   '+1.070661E+00,+6.999261E-01,-1.310137E-01,' +
+                   '+2.804529E+00,-3.269150E-01,-7.918662E+00,' +
+                   '+8.545322E-02,-3.140700E-02,-5.392097E-02,' +
+                   '+3.179056E+02*41\r\n')
+
+    # these are examples of ones with different line endings
+    strings.append('$VNRRG,5,9600*65')
+    strings.append('$VNRRG,5,9600*65\r')
+    strings.append('$VNRRG,5,9600*65\n')
+
+    # here are a couple of typical corrupt ones
+    strings.append('987319E-01,-1.340267E-01,' +
+                   '+3.290921E+00,-6.257143E-02,-8.909048E+00,' +
+                   '+8.488191E-02,-2.269540E-02,-5.960917E-02,' +
+                   '+3.179056E+02*42\r\n')
+    strings.append('$VNCMV,' +
+                   '+1.080685E+00,+7.243825E-01,-1.458829E-01,' +
+                   '+3.421932E+00,' +
+                   '+1.361301E+00611385E-01,' + # this the bad one
+                   '-8.552538E+00,' +
+                   '-4.502851E-02,-2.731314E-02,+1.610722E-01,' +
+                   '+3.179069E+02*4F\r\n')
