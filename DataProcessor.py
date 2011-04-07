@@ -868,7 +868,7 @@ def parse_vnav_string(vnStr):
     if vnList[0] == 'VNRRG':
         vnrrg = True
     else:
-        vnrgg = False
+        vnrrg = False
     # see if the checksum passes
     chkPass = calcChkSum == vnList[-1]
     if not chkPass:
@@ -937,7 +937,7 @@ def get_run_data(pathtofile):
             pstr = str(col.read()[0])
             rundata['par'][col.name] = pstr
             if pstr[0] == '$':
-                parsed = parse_vnav_string(pstr, remove=2)
+                parsed = parse_vnav_string(pstr)[0][2:-1]
                 if len(parsed) == 1:
                     try:
                         parsed = int(parsed[0])
