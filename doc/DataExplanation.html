@@ -191,8 +191,10 @@ time. The size of the matrix is (par.NINumSamples, length(InputPairs)).</p>
 
 <h3><span class="mono">VNavCols</span>, cell array</h3>
 <p>This cell array contains the ordered names of the data signals collected
-from the VN-100. These depend on what <span class="mono">par.ADOT</span> is set to.</p>
-par.ADOT = 253
+from the VN-100. These depend on what <span class="mono">par.ADOT</span> is set
+to.</p>
+
+<span class="mono">par.ADOT = 253</span>
 <ol>
   <li>Mag X</li>
   <li>Mag Y</li>
@@ -205,7 +207,8 @@ par.ADOT = 253
   <li>Angular Rate Z</li>
   <li>Temperature</li>
 </ol>
-par.ADOT = 14
+
+<span class="mono">par.ADOT = 14</span>
 <ol>
   <li>Angular Rotation Z</li>
   <li>Angular Rotation Y</li>
@@ -231,5 +234,68 @@ data has an NaN value for any corrupt lines from
 <h3><span class="mono">VNavDataText</span>, cell array</h3>
 <p>This cell array contains the actual text output from the VN-100 for each
 sample. Some lines are corrupted.</p>
+
+<h2>Processed Data</h2>
+
+<dl>
+  <dt><span class="mono">FrameAccelerationX</span>, matrix</dt>
+  <dd>The acceleration of a point on the bicycle frame in the forward
+  direcion.This is computed from the frame accelerometer.</dd>
+
+  <dt><span class="mono">FrameAccelerationY</span>, matrix</dt>
+  <dd>The acceleration of a point on the bicycle frame in the lateral
+  direcion.This is computed from the frame accelerometer.</dd>
+
+  <dt><span class="mono">FrameAccelerationZ</span>, matrix</dt>
+  <dd>The acceleration of a point on the bicycle frame in the vertical
+  direcion.This is computed from the frame accelerometer.</dd>
+
+  <dt><span class="mono">PitchRate</span>, matrix</dt>
+  <dd>The pitch rate of the bicycle frame relative to the ground.  Positive is
+  clockwise looking from the left of the bicycle. This is computed from the
+  frame rate sensors.</dd>
+
+  <dt><span class="mono">PullForce</span>, matrix</dt>
+  <dd>The pull force acting on a point just below the bicycle seat. This is
+  computed from the pull force load cell.</dd>
+
+  <dt><span class="mono">RearWheelRate</span>, matrix</dt>
+  <dd>The rotational angular speed of the rear wheel relative to the bicycle
+  frame.
+  Positive is clockwise looking from the left side of the bicycle. This is computed
+  from the roll wheel speed motor.</dd>
+
+  <dt><span class="mono">RollAngle</span>, matrix</dt>
+  <dd>The roll angle of the bicycle frame relative to the ground plane.
+  Positive is clockwise looking from the rear of the bicycle. This is computed
+  from the roll angle potentiometer.</dd>
+
+  <dt><span class="mono">RollRate</span>, matrix</dt>
+  <dd>The roll rate of the bicycle frame relative to the ground plane.
+  Positive is clockwise looking from the rear of the bicycle. This is computed
+  from the roll frame rate sensors.</dd>
+
+  <dt><span class="mono">SteerAngle</span>, matrix</dt>
+  <dd>The steer angle of the handlebar/fork relative to the bicycle frame.
+  Positive is clockwise looking from the top of the bicycle.</dd>
+
+  <dt><span class="mono">SteerRate</span>, matrix</dt>
+  <dd>The steer rate of the handlebar/fork relative to the bicycle frame.
+  Positive is clockwise looking from the top of the bicycle. This is computted
+  from the steer rate gyro and ther frame rates.</dd>
+
+  <dt><span class="mono">SteerTorque</span>, matrix</dt>
+  <dd>The steer torque applied by the rider to the handlebar.
+  Positive is clockwise looking from the top of the bicycle. This is computed
+  from the steer torque sensor and the steer angle/rate.</dd>
+
+  <dt><span class="mono">tau</span>, float</dt>
+  <dd>The shift in time between the NI signals and the VN signals.</dd>
+
+  <dt><span class="mono">YawRate</span>, matrix</dt>
+  <dd>The yaw rate of the bicycle frame relative to the ground.
+  Positive is clockwise looking from the top of the bicycle. This is computed
+  from the frame rate sensors.</dd>
+</dl>
 
 </body>

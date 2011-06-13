@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+'''This script is to test out the best way to do the bump detection.'''
 
 import tables as tab
 import numpy as np

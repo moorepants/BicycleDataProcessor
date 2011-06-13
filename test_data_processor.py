@@ -56,6 +56,21 @@ def test_split_around_nan():
     assert indices[4] == (6, 8)
     assert indices[5] == (8, 9)
 
+def test_vnav_checksum():
+    s = ('$VNCMV,' +
+         '+1.045402E+00,+6.071629E-01,-4.171332E-01,' +
+         '+3.659531E+00,-3.211054E-01,-9.641082E+00,' +
+         '+9.549000E-03,-2.366146E-02,-2.832810E-02,' +
+         '+3.179132E+02'
+         '*4F\r\n')
+    assert dp.vnav_checksum(s) == '4F'
+
+    s = '$VNRRG,04,1*6A\r\n'
+    assert dp.vnav_checksum(s) == '6A'
+
+    s = '$VNRRG,08,-027.33,-005.33,+002.63*65\r\n'
+    assert dp.vnav_checksum(s) == '65'
+
 def test_parse_vnav_string():
     strings = []
     # this is an example output from a read register (VNRRG) command
@@ -63,13 +78,14 @@ def test_parse_vnav_string():
          '252,' +
          '+2.088900E-01,-5.476115E-01,-1.835284E+00,' +
          '+2.077137E-02,+3.030512E-01,-9.876616E+00,' +
-         '+7.808615E-02,+9.382707E-02,+1.179649E-02,' + 
+         '+7.808615E-02,+9.382707E-02,+1.179649E-02,' +
          '+2.099097E+01*45\r\n')
     vnList, chkPass, vnrrg = dp.parse_vnav_string(s)
+    print vnList
     l = ['VNRRG', '252',
          '+2.088900E-01', '-5.476115E-01', '-1.835284E+00',
          '+2.077137E-02', '+3.030512E-01', '-9.876616E+00',
-         '+7.808615E-02', '+9.382707E-02', '+1.179649E-02', 
+         '+7.808615E-02', '+9.382707E-02', '+1.179649E-02',
          '+2.099097E+01']
     assert vnList == l
     assert chkPass
@@ -78,7 +94,7 @@ def test_parse_vnav_string():
     strings.append('$VNRRG,03,067200383733335843046264*58\r\n')
 
     # this is an example of an asyn output
-    strings.append('$VNCMV,' + 
+    strings.append('$VNCMV,' +
                    '+1.070661E+00,+6.999261E-01,-1.310137E-01,' +
                    '+2.804529E+00,-3.269150E-01,-7.918662E+00,' +
                    '+8.545322E-02,-3.140700E-02,-5.392097E-02,' +

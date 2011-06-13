@@ -26,7 +26,7 @@ class Run():
         datafile : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
-        forcecalc : boolean
+        forceRecalc : boolean
             If true then it will force a recalculation of all the the non raw
             data.
 
@@ -36,11 +36,19 @@ class Run():
         datatable = datafile.root.data.datatable
 
         # these are the columns that may need to be calculated
-        processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
-                         'RearWheelRate', 'SteerTorque', 'YawRate',
-                         'PitchRate', 'FrameAccelerationX',
-                         'FrameAccelerationY', 'FrameAccelerationZ',
-                         'PullForce', 'tau']
+        processedCols = ['FrameAccelerationX',
+                         'FrameAccelerationY',
+                         'FrameAccelerationZ',
+                         'PitchRate',
+                         'PullForce',
+                         'RearWheelRate',
+                         'RollAngle',
+                         'RollRate',
+                         'SteerAngle',
+                         'SteerRate',
+                         'SteerTorque',
+                         'tau',
+                         'YawRate']
 
         # make a container for the data
         self.data = {}
@@ -855,28 +863,36 @@ def parse_vnav_string(vnStr):
     '''
     # calculate the checksum of the raw string
     calcChkSum = vnav_checksum(vnStr)
-    # get rid of the $ and the *checksum
+    #print('Checksum for the raw string is %s' % calcChkSum)
+
+    # get rid of the $ and the newline characters
     vnMeat = re.sub('''(?x) # verbose
-                      \$ # match the dollar sign at the beginning
-                      (.*) # this is the content
-                      \* # match the asterisk
-                      (\w*) # the checksum
-                      \s* # the newline characters''', r'\1,\2', vnStr)
-    # make it a list the last item should be the checksum
+                       \$ # match the dollar sign at the beginning
+                       (.*) # this is the content
+                       \* # match the asterisk
+                       (\w*) # the checksum
+                       \s* # the newline characters''', r'\1,\2', vnStr)
+
+    # make it a list with the last item being the checksum
     vnList = vnMeat.split(',')
+
     # set the vnrrg flag
     if vnList[0] == 'VNRRG':
         vnrrg = True
     else:
         vnrrg = False
+
+    #print("Provided checksum is %s" % vnList[-1])
     # see if the checksum passes
     chkPass = calcChkSum == vnList[-1]
     if not chkPass:
         print "Checksum failed"
         print vnStr
         vnrrg = None
-    # return the list and whether or not the checksum failed
-    return vnList, chkPass, vnrrg
+
+    # return the list, whether or not the checksum failed and whether or not it
+    # is a VNRRG
+    return vnList[:-1], chkPass, vnrrg
 
 def vnav_checksum(vnStr):
     '''
@@ -886,10 +902,12 @@ def vnav_checksum(vnStr):
     ----------
     vnStr : string
         Of the form '$...*X' where X is the two digit checksum.
+
     Returns
     -------
     chkSum : string
-        Two digit hex representation of the checksum.
+        Two character hex representation of the checksum. The letters are
+        capitalized and single digits have a leading zero.
 
     '''
     chkStr = re.sub('''(?x) # verbose
@@ -898,8 +916,18 @@ def vnav_checksum(vnStr):
                        \* # match the asterisk
                        \w* # the checksum
                        \s* # the newline characters''', r'\1', vnStr)
+
     checksum = reduce(xor, map(ord, chkStr))
-    return hex(checksum)[2:]
+    # remove the first '0x'
+    hexVal = hex(checksum)[2:]
+
+    # if the hexVal is only a single digit, it needs a leading zero to match
+    # the VN-100's output
+    if len(hexVal) == 1:
+        hexVal = '0' + hexVal
+
+    # the letter's need to be capitalized to match too
+    return hexVal.upper()
 
 def get_run_data(pathtofile):
     '''
