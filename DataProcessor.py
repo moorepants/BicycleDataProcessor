@@ -836,18 +836,55 @@ def create_run_table_class(filteredrun, unfilteredrun):
 
     return RunTable
 
-def parse_vnav_string(vnStr):
+def replace_corrupt_strings_with_nan(vnOutput, vnCols):
+    '''Returns a numpy matrix with the VN-100 output that has the corrupt
+    values replaced by nan values.
+
+    Parameters
+    ----------
+    vnOutput : list
+        The list of output strings from an asyncronous reading from the VN-100.
+    vnCols : list
+        A list of the column names for this particular async output.
+
+    Returns
+    -------
+    vnData : array
+        An array containing the corrected data values.
+
     '''
-    Returns a list of the information in a VN-100 text string and whether the
-    checksum failed.
+
+    vnData = []
+
+    nanRow = [np.nan for i in range(len(vnCols))]
+
+    # go through each sample in the vn-100 output
+    for i, vnStr in enumerate(vnOutput):
+        # parse the string
+        vnList, chkPass, vnrrg = parse_vnav_string(vnStr)
+        # if the checksum passed, then append the data
+        if chkPass:
+            vnData.append([float(x) for x in vnList[1:-1]])
+        # if not append some nan values
+        else:
+            if i == 0:
+                vnData.append(nanRow)
+            # there are typically at least two corrupted samples combine into
+            # one
+            else:
+                vnData.append(nanRow)
+                vnData.append(nanRow)
+
+    return np.array(vnData)
+
+def parse_vnav_string(vnStr):
+    '''Returns a list of the information in a VN-100 text string and whether
+    the checksum failed.
 
     Parameters
     ----------
     vnStr : string
-        A string from the VectorNav serial output.
-    remove : int
-        Specifies how many values to remove from the beginning of the output
-        list. Useful for removing VNWRG, etc.
+        A string from the VectorNav serial output (UART mode).
 
     Returns
     -------
@@ -886,13 +923,13 @@ def parse_vnav_string(vnStr):
     # see if the checksum passes
     chkPass = calcChkSum == vnList[-1]
     if not chkPass:
-        print "Checksum failed"
-        print vnStr
+        #print "Checksum failed"
+        #print vnStr
         vnrrg = None
 
     # return the list, whether or not the checksum failed and whether or not it
     # is a VNRRG
-    return vnList[:-1], chkPass, vnrrg
+    return vnList, chkPass, vnrrg
 
 def vnav_checksum(vnStr):
     '''
@@ -982,12 +1019,15 @@ def get_run_data(pathtofile):
     rundata['NIData'] = runfile.root.NIData.read()
     rundata['VNavData'] = runfile.root.VNavData.read()
 
+    # get the VN-100 data column names
     # make the array into a list of python string and gets rid of unescaped
     # control characters
     columns = [re.sub(r'[^ -~].*', '', str(x))
                for x in runfile.root.VNavCols.read()]
     # gets rid of white space
     rundata['VNavCols'] = [x.replace(' ', '') for x in columns]
+
+    # get the NI column names
     # make a list of NI columns from the InputPair structure from matlab
     rundata['NICols'] = []
     for col in runfile.root.InputPairs:
@@ -999,6 +1039,12 @@ def get_run_data(pathtofile):
 
     # get the VNavDataText
     rundata['VNavDataText'] = [str(x) for x in runfile.root.VNavDataText.read()]
+
+    # redefine the NIData using a smarter parsing that accounts for the corrupt
+    # values better
+    rundata['VNavData'] = replace_corrupt_strings_with_nan(
+                           rundata['VNavDataText'],
+                           rundata['VNavCols'])
 
     # close the file
     runfile.close()
