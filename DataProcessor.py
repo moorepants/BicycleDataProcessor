@@ -35,7 +35,7 @@ class Run():
         # get the run data table
         datatable = datafile.root.data.datatable
 
-        # these are the columns that may need to be calculated
+        # these are the columns that need to be calculated
         processedCols = ['FrameAccelerationX',
                          'FrameAccelerationY',
                          'FrameAccelerationZ',
@@ -686,7 +686,7 @@ def unsize_vector(vector, m):
     elif m == len(vector):
         oldvec = vector
     else:
-        print "Something's wrong here"
+        raise StandardError("Something's wrong with the unsizing")
     return oldvec
 
 def size_vector(vector, m):
@@ -715,7 +715,7 @@ def size_vector(vector, m):
     elif m == nsamp:
         newvec = vector
     else:
-        print "This didn't work"
+        raise StandardError("Vector sizing didn't work")
     return newvec
 
 def fill_table(datafile):
@@ -758,16 +758,16 @@ def fill_table(datafile):
 def create_database():
     '''Creates an HDF5 file for data collected from the instrumented bicycle'''
 
-    # load the latest file in the ../BicycleDAQ/data/h5 directory
+    # load the latest files from the ../BicycleDAQ/data/h5 directory
     pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
     files = sorted(os.listdir(pathtoh5))
     filteredrun = get_run_data(os.path.join(pathtoh5, files[0]))
     unfilteredrun = get_run_data(os.path.join(pathtoh5, files[-1]))
     if filteredrun['par']['ADOT'] is not 14:
-        print('Run %d is not a filtered run, choose again' %
+        raise ValueError('Run %d is not a filtered run, choose again' %
               filteredrun['par']['RunID'])
     if unfilteredrun['par']['ADOT'] is not 253:
-        print('Run %d is not a unfiltered run, choose again' %
+        raise ValueError('Run %d is not a unfiltered run, choose again' %
               unfilteredrun['par']['RunID'])
     # generate the table description class
     RunTable = create_run_table_class(filteredrun, unfilteredrun)
@@ -788,8 +788,10 @@ def create_run_table_class(filteredrun, unfilteredrun):
 
     Parameters
     ----------
-    rundata : dict
-        Contains the python dictionary of a particular run.
+    filteredrun : dict
+        Contains the python dictionary of a run with filtered VN-100 data.
+    unfilteredrun : dict
+        Contains the python dictionary of a run with unfiltered VN-100 data.
 
     Returns
     -------
@@ -809,7 +811,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
         for k, col in enumerate(VNavCols):
             exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(unfilteredrun['par'].items()):
-            pos = k+1+i
+            pos = k + 1 + i
             if isinstance(val, type(1)):
                 exec(key + " = tab.Int64Col(pos=pos)")
             elif isinstance(val, type('')):
@@ -820,16 +822,24 @@ def create_run_table_class(filteredrun, unfilteredrun):
                 exec(key + " = tab.Float64Col(shape=(" + str(len(val)) + ", ), pos=pos)")
 
         # add the columns for the processed data
-        processedCols = ['SteerAngle', 'SteerRate', 'RollAngle', 'RollRate',
-                         'RearWheelRate', 'SteerTorque', 'YawRate',
-                         'PitchRate', 'FrameAccelerationX',
-                         'FrameAccelerationY', 'FrameAccelerationZ',
-                         'PullForce', 'tau']
+        processedCols = ['FrameAccelerationX',
+                         'FrameAccelerationY',
+                         'FrameAccelerationZ',
+                         'PitchRate',
+                         'PullForce',
+                         'RearWheelRate',
+                         'RollAngle',
+                         'RollRate',
+                         'SteerAngle',
+                         'SteerRate',
+                         'SteerTorque',
+                         'tau',
+                         'YawRate']
         for k, col in enumerate(processedCols):
             if col == 'tau':
-                exec(col + " = tab.Float32Col(pos=i+1+k)")
+                exec(col + " = tab.Float32Col(pos=i + 1 + k)")
             else:
-                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
+                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i + 1 + k)")
 
         # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val, processedCols)
@@ -877,7 +887,7 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
                 vnData.append(nanRow)
                 vnData.append(nanRow)
 
-    return np.array(vnData)
+    return np.transpose(np.array(vnData))
 
 def parse_vnav_string(vnStr):
     '''Returns a list of the information in a VN-100 text string and whether
