@@ -862,8 +862,10 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
     for i, vnStr in enumerate(vnOutput):
         # parse the string
         vnList, chkPass, vnrrg = parse_vnav_string(vnStr)
-        # if the checksum passed, then append the data
-        if chkPass:
+        # if the checksum passed, then append the data unless vnList is not the
+        # correct length, (this is because run139 sample 4681 seems to calculate the correct
+        # checksum for an incorrect value)
+        if chkPass and len(vnList[1:-1]) == len(vnCols):
             vnData.append([float(x) for x in vnList[1:-1]])
         # if not append some nan values
         else:
@@ -1017,7 +1019,6 @@ def get_run_data(pathtofile):
 
     # get the NIData and VNavData
     rundata['NIData'] = runfile.root.NIData.read()
-    rundata['VNavData'] = runfile.root.VNavData.read()
 
     # get the VN-100 data column names
     # make the array into a list of python string and gets rid of unescaped
@@ -1040,8 +1041,8 @@ def get_run_data(pathtofile):
     # get the VNavDataText
     rundata['VNavDataText'] = [str(x) for x in runfile.root.VNavDataText.read()]
 
-    # redefine the NIData using a smarter parsing that accounts for the corrupt
-    # values better
+    # redefine the NIData using parsing that accounts for the corrupt values
+    # better
     rundata['VNavData'] = replace_corrupt_strings_with_nan(
                            rundata['VNavDataText'],
                            rundata['VNavCols'])
