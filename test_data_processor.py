@@ -143,3 +143,12 @@ def test_parse_vnav_string():
 
     for s, a in zip(strings, answers):
         assert dp.parse_vnav_string(s) == a
+
+def test_sync_error():
+    tau = 0.234
+    time = dp.np.linspace(0, 10, num=100)
+    sig1 = dp.np.sin(time - tau)
+    sig2 = dp.np.sin(time)
+    # I feel like I should be able to set the value lower than zero, but I
+    # don't seem to be getting perfect fits. I'm not sure why.
+    assert dp.sync_error(tau, sig1, sig2, time) < 0.01

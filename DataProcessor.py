@@ -470,41 +470,59 @@ def get_row_num(runid, table):
               if x['RunID'] == int(runid)]
     return rownum[0]
 
-def sync_error(tau, s1, s2, t):
-    '''
-    Returns the error between two signals.
+def sync_error(tau, signal1, signal2, time):
+    '''Returns the error between two signal time histories.
 
     Parameters
     ----------
     tau : float
-        Guess for the time shift
-    s1 : ndarray, shape(n, )
+        The time shift.
+    signal1 : ndarray, shape(n, )
+        The signal that will be interpolated and shifted. This signal is
+        typically "cleaner" that signal2.
         Vertical acceleration data of the NI accelerometer
-    s2 : ndarray, shape(n, )
+    signal2 : ndarray, shape(n, )
+        The signal to syncronize with the base signal.
         Vertical acceleration data of the VN accelerometer. This signal may
         have some nan's.
-    t : ndarray
+    time : ndarray
         Time
 
     Returns
     -------
-    e : float
-        Error between the two signals.
+    error : float
+        Error between the two signals for the given tau.
 
     '''
-    # the number of samples
-    N = t.shape[0]
-    # set up a shifted time vector
-    t1_interp = np.linspace(np.min(t) + np.abs(tau),
-                            np.max(t) - np.abs(tau),
-                            N)
-    t2_interp = t1_interp - tau
-    s1_interp = sp.interp(t1_interp, t, s1);
-    s2_interp = sp.interp(t2_interp,
-                          t[~np.isnan(s2)],
-                          s2[~np.isnan(s2)]);
-    e  = sum((s1_interp[:round(.2*N)]-s2_interp[:round(.2*N)])**2)
-    return e
+    # make sure tau isn't too large
+    if np.abs(tau) >= time[-1]:
+        raise ValueError(('abs(tau), {0}, must be less than or equal to ' +
+                         '{1}').format(str(np.abs(tau)), str(time[-1])))
+
+    # this is the time for the second signal which is assumed to lag the first
+    # signal
+    shiftedTime = time + tau
+
+    # create time vector where the two signals overlap
+    if tau > 0:
+        intervalTime = shiftedTime[np.nonzero(shiftedTime < time[-1])]
+    else:
+        intervalTime = shiftedTime[np.nonzero(shiftedTime > time[0])]
+
+    # interpolate between signal 1 samples to find points that correspond in
+    # time to signal 2 on the shifted time
+    sig1OnInterval = sp.interp(intervalTime, time, signal1);
+
+    # truncate signal 2 to the time interval
+    if tau > 0:
+        sig2OnInterval = signal2[np.nonzero(shiftedTime <= intervalTime[-1])]
+    else:
+        sig2OnInterval = signal2[np.nonzero(shiftedTime >= intervalTime[0])]
+
+    # calculate the error between the two signals
+    error = np.linalg.norm(sig1OnInterval - sig2OnInterval)
+
+    return error
 
 def subtract_mean(sig):
     '''
@@ -859,8 +877,9 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
 
     Returns
     -------
-    vnData : array
-        An array containing the corrected data values.
+    vnData : array (m, n)
+        An array containing the corrected data values. n is the number of
+        samples and m is the number of signals.
 
     '''
 
