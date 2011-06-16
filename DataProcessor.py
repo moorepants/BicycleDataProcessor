@@ -13,17 +13,16 @@ from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 
 class Run():
-    '''
-    The fundamental class for a run.
+    '''The fundamental class for a run.'''
 
-    '''
     def __init__(self, runid, datafile, forceRecalc=False):
         '''Loads all parameters if available otherwise it generates them.
 
         Parameters
         ----------
         runid : int or string
-            The run id: 5 or '00005'.
+            The run id should be an integer, e.g. 5, or a five digit string with
+            leading zeros, e.g. '00005'.
         datafile : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
@@ -57,43 +56,50 @@ class Run():
         # get the row number for this particular run id
         rownum = get_row_num(runid, datatable)
 
-        # if the data hasn't been time shifted, then do it now
-        curtau = datatable[rownum]['tau']
-        print 'curtau', curtau
-        sampleRate = get_cell(datatable, 'NISampleRate', rownum)
-        if curtau == 0. or forceRecalc == True:
-            # calculate tau for this run
-            niAcc = get_cell(datatable, 'FrameAccelY', rownum)
-            vnAcc = get_cell(datatable, 'AccelerationZ', rownum)
-            speed = get_cell(datatable, 'Speed', rownum)
-            threeVolts = get_cell(datatable, 'ThreeVolts', rownum)
-            tau = find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed)
-            print 'This is tau', tau
-
-            # store tau in the the table
-            datatable.cols.tau[rownum] = tau
-            datatable.flush()
-        else:
-            tau = curtau
-
-        cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
-                'CalibData', 'calibdata.h5'))
-
+        # grab the data for the run number and column name
         for col in datatable.colnames:
-            # grab the data for the run number and column name
             coldata = get_cell(datatable, col, rownum)
-            # now check to see if we need to process the data
-            if col in processedCols: # and np.sum(coldata) == 0.:
-                print col, 'needs some processing'
-                if col == 'tau':
-                    pass
-                elif col in cdat.keys():
-                    print 'Processing', col
-                    voltage = get_cell(datatable, cdat[col]['signal'], rownum)
-                    scaled = linear_calib(voltage, cdat[col])
-                    coldata = truncate_data(scaled, 'NI', Fs, tau)
-
             self.data[col] = coldata
+
+        # tell the user about the run
+        self.print_run_info()
+
+        if forceRecalc == True:
+            # if the time shift hasn't been calculated, do it now
+            curtau = datatable[rownum]['tau']
+            print 'curtau', curtau
+            sampleRate = get_cell(datatable, 'NISampleRate', rownum)
+            if curtau == 0. or forceRecalc == True:
+                # calculate tau for this run
+                niAcc = get_cell(datatable, 'FrameAccelY', rownum)
+                vnAcc = get_cell(datatable, 'AccelerationZ', rownum)
+                speed = get_cell(datatable, 'Speed', rownum)
+                threeVolts = get_cell(datatable, 'ThreeVolts', rownum)
+                tau = find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed)
+                print 'This is tau', tau
+
+                # store tau in the the table
+                datatable.cols.tau[rownum] = tau
+                datatable.flush()
+            else:
+                tau = curtau
+
+            cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
+                    'CalibData', 'calibdata.h5'))
+
+            for col in datatable.colnames:
+                # now check to see if we need to process the data
+                if col in processedCols: # and np.sum(coldata) == 0.:
+                    print col, 'needs some processing'
+                    if col == 'tau':
+                        pass
+                    elif col in cdat.keys():
+                        print 'Processing', col
+                        voltage = get_cell(datatable, cdat[col]['signal'], rownum)
+                        scaled = linear_calib(voltage, cdat[col])
+                        coldata = truncate_data(scaled, 'NI', sampleRate, tau)
+
+                self.data[col] = coldata
 
     def plot(self, *args):
         '''
@@ -107,8 +113,7 @@ class Run():
 
         '''
         samplerate = self.data['NISampleRate']
-        #n = len(self.data['SteerAngle'])
-        n = len(self.data['SteerPotentiometer'])
+        n = len(self.data[args[0]])
         t = np.linspace(0., n/samplerate, num=n)
 
         for i, arg in enumerate(args):
@@ -143,6 +148,18 @@ class Run():
             os.system('vlc "' + path + '"')
         else:
             print "No video for this run"
+
+    def print_run_info(self):
+        '''Prints basic run information to the screen.'''
+
+        print "-" * 79
+        print 'Loading run #', self.data['Runid']
+        print "Environment:", self.data['Environment']
+        print "Rider:", self.data['Rider']
+        print "Speed:", self.data['Speed']
+        print "Maneuver:", self.data['Maneuver']
+        print "Notes:", self.data['Notes']
+        print "-" * 79
 
 def split_around_nan(sig):
     '''
@@ -248,8 +265,8 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     print 'Bump time:', indice / sampleRate
 
     # give a warning if the bump doesn't seem to be at the beginning of the run
-    if indice > len(accelSignal) / 4.:
-        print "This signal's max value is not in the first quarter of the data"
+    if indice > len(accelSignal) / 3.:
+        print "This signal's max value is not in the first third of the data"
         print("It is at %f seconds out of %f seconds" %
             (indice / sampleRate, len(accelSignal) / sampleRate))
 
@@ -352,10 +369,10 @@ def linear_calib(V, calibdata):
 
     p1 = calibdata['slope']
     p0 = calibdata['offset']
-    s = p1*V + p0
+    s = p1 * V + p0
     return s
 
-def rollpitchyawrate(framerate_x, framerate_y, framerate_z, bikeparms):
+def roll_pitch_yaw_rate(framerate_x, framerate_y, framerate_z, bikeparms):
     '''Transforms the measured body fixed rates to global rates by
     rotating them along the head angle.
 
@@ -379,7 +396,7 @@ def rollpitchyawrate(framerate_x, framerate_y, framerate_z, bikeparms):
     yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
     return yawrate, pitchrate, rollrate
 
-def steerrate(steergyro, framerate_z):
+def steer_rate(steergyro, framerate_z):
     lam = bikeparms['lambda']
     deltad = steergyro + framerate_z
     return deltad
@@ -1076,7 +1093,7 @@ def get_run_data(pathtofile):
     if 'Notes' not in rundata['par'].keys():
         rundata['par']['Notes'] = ''
 
-    # get the NIData and VNavData
+    # get the NIData
     rundata['NIData'] = runfile.root.NIData.read()
 
     # get the VN-100 data column names
@@ -1098,7 +1115,8 @@ def get_run_data(pathtofile):
     rundata['NICols'] = [x[0] for x in rundata['NICols']]
 
     # get the VNavDataText
-    rundata['VNavDataText'] = [str(x) for x in runfile.root.VNavDataText.read()]
+    rundata['VNavDataText'] = [re.sub(r'[^ -~].*', '', str(x))
+                               for x in runfile.root.VNavDataText.read()]
 
     # redefine the NIData using parsing that accounts for the corrupt values
     # better
