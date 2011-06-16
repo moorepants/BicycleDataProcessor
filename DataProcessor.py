@@ -60,12 +60,14 @@ class Run():
         # if the data hasn't been time shifted, then do it now
         curtau = datatable[rownum]['tau']
         print 'curtau', curtau
-        Fs = get_cell(datatable, 'NISampleRate', rownum)
+        sampleRate = get_cell(datatable, 'NISampleRate', rownum)
         if curtau == 0. or forceRecalc == True:
             # calculate tau for this run
-            NIacc = get_cell(datatable, 'FrameAccelY', rownum)
-            VNacc = get_cell(datatable, 'AccelerationZ', rownum)
-            tau, error = find_timeshift(NIacc, VNacc, Fs)
+            niAcc = get_cell(datatable, 'FrameAccelY', rownum)
+            vnAcc = get_cell(datatable, 'AccelerationZ', rownum)
+            speed = get_cell(datatable, 'Speed', rownum)
+            threeVolts = get_cell(datatable, 'ThreeVolts', rownum)
+            tau = find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed)
             print 'This is tau', tau
 
             # store tau in the the table
