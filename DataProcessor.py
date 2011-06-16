@@ -837,8 +837,12 @@ def create_database():
                         title='Instrumented Bicycle Data')
     # create a group for the raw data
     rgroup = data.createGroup('/', 'data', 'Data')
+    # setup up a compression filter
+    compression = tab.Filters(complevel=1, complib='zlib')
     # add the data table to this group
-    rtable = data.createTable(rgroup, 'datatable', RunTable, 'Primary Data Table')
+    rtable = data.createTable(rgroup, 'datatable',
+                              RunTable, 'Primary Data Table',
+                              filters=compression)
     rtable.flush()
     data.close()
 
