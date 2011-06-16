@@ -153,7 +153,7 @@ class Run():
         '''Prints basic run information to the screen.'''
 
         print "-" * 79
-        print 'Loading run #', self.data['Runid']
+        print 'Loading run #', self.data['RunID']
         print "Environment:", self.data['Environment']
         print "Rider:", self.data['Rider']
         print "Speed:", self.data['Speed']
@@ -779,8 +779,9 @@ def size_vector(vector, m):
         raise StandardError("Vector sizing didn't work")
     return newvec
 
-def fill_table(datafile):
-    '''Adds all the data from the hdf5 files in the h5 directory to the table.
+def fill_tables(datafile='InstrumentedBicycleData.h5',
+                pathToH5='../BicycleDAQ/data/h5'):
+    '''Adds all the data from the hdf5 files in the h5 directory to the tables.
 
     Parameters
     ----------
@@ -789,19 +790,20 @@ def fill_table(datafile):
 
     '''
 
-    # load the files from the ../BicycleDAQ/data/h5 directory
-    pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
-    files = sorted(os.listdir(pathtoh5))
-    # open an hdf5 file for appending
+    # open the hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
     # get the table
     datatable = data.root.data.datatable
     # get the row
     row = datatable.row
+
+    # load the files from the h5 directory
+    files = sorted(os.listdir(pathToH5))
+
     # fill the rows with data
     for run in files:
         print 'Adding run: %s' % run
-        rundata = get_run_data(os.path.join(pathtoh5, run))
+        rundata = get_run_data(os.path.join(pathToH5, run))
         for par, val in rundata['par'].items():
             row[par] = val
         # only take the first 12000 samples for all runs
@@ -814,29 +816,98 @@ def fill_table(datafile):
             row[col] = size_vector(rundata['VNavData'][i], 12000)
         row.append()
     datatable.flush()
+
+    # fill in the signal table
+    signaltable = data.root.data.signaltable
+    row = signaltable.row
+
+    # these are data signals that will be created from the raw data
+    processedCols = ['FrameAccelerationX',
+                     'FrameAccelerationY',
+                     'FrameAccelerationZ',
+                     'PitchRate',
+                     'PullForce',
+                     'RearWheelRate',
+                     'RollAngle',
+                     'RollRate',
+                     'SteerAngle',
+                     'SteerRate',
+                     'SteerTorque',
+                     'tau',
+                     'YawRate']
+
+    # get two example runs
+    filteredRun, unfilteredRun = get_two_runs(pathToH5)
+
+    niCols = filteredRun['NICols']
+    # combine the VNavCols from unfiltered and filtered
+    vnCols = set(filteredRun['VNavCols'] + unfilteredRun['VNavCols'])
+
+    for sig in set(niCols + list(vnCols) + processedCols):
+        row['signal'] = sig
+
+        if sig in niCols:
+            row['source'] = 'NI'
+            row['isRaw'] = True
+            row['units'] = 'volts'
+        elif sig in vnCols:
+            row['source'] = 'VN'
+            row['isRaw'] = True
+        elif sig in processedCols:
+            row['source'] = 'NA'
+            row['isRaw'] = False
+        else:
+            raise KeyError('{0} is not raw or processed'.format(sig))
+
+        row.append()
+
+    signaltable.flush()
+
     data.close()
 
-def create_database():
-    '''Creates an HDF5 file for data collected from the instrumented bicycle'''
+def get_two_runs(pathToH5):
+    '''Gets the data from both a filtered and unfiltered run.'''
 
-    # load the latest files from the ../BicycleDAQ/data/h5 directory
-    pathtoh5 = os.path.join('..', 'BicycleDAQ', 'data', 'h5')
-    files = sorted(os.listdir(pathtoh5))
-    filteredrun = get_run_data(os.path.join(pathtoh5, files[0]))
-    unfilteredrun = get_run_data(os.path.join(pathtoh5, files[-1]))
-    if filteredrun['par']['ADOT'] is not 14:
+    # load in the data files
+    files = sorted(os.listdir(pathToH5))
+
+    # get an example filtered and unfiltered run (wrt to the VN-100 data)
+    filteredRun = get_run_data(os.path.join(pathToH5, files[0]))
+    if filteredRun['par']['ADOT'] is not 14:
         raise ValueError('Run %d is not a filtered run, choose again' %
-              filteredrun['par']['RunID'])
-    if unfilteredrun['par']['ADOT'] is not 253:
+              filteredRun['par']['RunID'])
+
+    unfilteredRun = get_run_data(os.path.join(pathToH5, files[-1]))
+    if unfilteredRun['par']['ADOT'] is not 253:
         raise ValueError('Run %d is not a unfiltered run, choose again' %
-              unfilteredrun['par']['RunID'])
-    # generate the table description class
-    RunTable = create_run_table_class(filteredrun, unfilteredrun)
+              unfilteredRun['par']['RunID'])
+
+    return filteredRun, unfilteredRun
+
+def create_database(filename='InstrumentedBicycleData.h5',
+                    pathToH5='../BicycleDAQ/data/h5'):
+    '''Creates an HDF5 file for data collected from the instrumented
+    bicycle.'''
+
     # open a new hdf5 file for writing
-    data = tab.openFile('InstrumentedBicycleData.h5', mode='w',
+    data = tab.openFile(filename, mode='w',
                         title='Instrumented Bicycle Data')
-    # create a group for the raw data
+    # create a group for the data
     rgroup = data.createGroup('/', 'data', 'Data')
+
+    # generate the signal table description class
+    SignalTable = create_signal_table_class()
+
+    # add the signal table to the group
+    sTable = data.createTable(rgroup, 'signaltable',
+                              SignalTable, 'Signal Information')
+    sTable.flush()
+
+    # get two example runs
+    filteredRun, unfilteredRun = get_two_runs(pathToH5)
+
+    # generate the table description class
+    RunTable = create_run_table_class(filteredRun, unfilteredRun)
     # setup up a compression filter
     compression = tab.Filters(complevel=1, complib='zlib')
     # add the data table to this group
@@ -846,9 +917,20 @@ def create_database():
     rtable.flush()
     data.close()
 
+def create_signal_table_class():
+    '''Creates a class that is used to describe the table containing
+    information about the signals.'''
+
+    class SignalTable(tab.IsDescription):
+        signal = tab.StringCol(20)
+        units = tab.StringCol(20)
+        source = tab.StringCol(2)
+        isRaw = tab.BoolCol()
+
+    return SignalTable
+
 def create_run_table_class(filteredrun, unfilteredrun):
-    '''
-    Returns a class that is used for the table description for raw data
+    '''Returns a class that is used for the table description for raw data
     for each run.
 
     Parameters
@@ -900,6 +982,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
                          'SteerTorque',
                          'tau',
                          'YawRate']
+
         for k, col in enumerate(processedCols):
             if col == 'tau':
                 exec(col + " = tab.Float32Col(pos=i + 1 + k)")
