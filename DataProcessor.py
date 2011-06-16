@@ -9,6 +9,7 @@ import scipy as sp
 from scipy.stats import nanmean, nanmedian
 from scipy.optimize import fmin
 from scipy.signal import butter, lfilter
+from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 
 class Run():
@@ -192,8 +193,7 @@ def split_around_nan(sig):
     return indices, arrays
 
 def time_vector(numSamples, sampleRate):
-    '''
-    Returns a time vector starting at zero.
+    '''Returns a time vector starting at zero.
 
     Parameters
     ----------
@@ -213,8 +213,7 @@ def time_vector(numSamples, sampleRate):
     return np.linspace(0., (ns - 1.) / sr, num=ns)
 
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
-    '''
-    Returns the indices that surround the bump in the acceleration signal.
+    '''Returns the indices that surround the bump in the acceleration signal.
 
     Parameters
     ----------
@@ -478,13 +477,10 @@ def sync_error(tau, signal1, signal2, time):
     tau : float
         The time shift.
     signal1 : ndarray, shape(n, )
-        The signal that will be interpolated and shifted. This signal is
-        typically "cleaner" that signal2.
-        Vertical acceleration data of the NI accelerometer
+        The signal that will be interpolated. This signal is
+        typically "cleaner" that signal2 and/or has a higher sample rate.
     signal2 : ndarray, shape(n, )
-        The signal to syncronize with the base signal.
-        Vertical acceleration data of the VN accelerometer. This signal may
-        have some nan's.
+        The signal that will be shifted to syncronize with signal 1.
     time : ndarray
         Time
 
@@ -556,61 +552,89 @@ def normalize(sig):
     '''
     return sig / np.nanmax(sig)
 
-def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
-    '''
-    Returns the timeshift (tau) of the VectorNav (VN) data relative to the
-    National Instruments (NI) data.
+def find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed):
+    '''Returns the timeshift, tau, of the VectorNav [VN] data relative to the
+    National Instruments [NI] data.
 
     Parameters
     ----------
     NIacc : ndarray, shape(n, )
-        The (mostly) vertical acceleration from the NI box. This can be raw
-        voltage or scaled signals. Be sure to set sign to False if the signals
-        have been scaled already.
+        The (mostly) vertical acceleration voltage signal from the NI box. 
     VNacc : ndarray, shape(n, )
         The (mostly) vertical acceleration from the VectorNav. Should be the
-        same length as NIacc an contain the same signal albiet time shifted.
+        same length as NIacc and contains the same signal albiet time shifted.
         The VectorNav signal should be leading the NI signal.
-    Fs : float or int
+    sampleRate : integer
         Sample rate of the signals. This should be the same for each signal.
-    guess : float
-        A extra guess for the time shift if you have more insight.
-    sign : boolean
-        True means the signs of the two signals are opposite, False means they
-        are the same.
+    threeVolts : ndarray, shape(n, )
+        The NI signal from the three volt source.
+    speed : float
+        The approximate forward speed of the bicycle.
 
     Returns
     -------
     tau : float
-        The timeshift. A positive value corresponds to the NI signal lagging the
-        VectorNav Signal.
-
-    error : ndarray, shape(500,)
-        Error versus tau.
+        The timeshift.
 
     '''
-    # the NIaccY is the negative of the VNaccZ
-    if sign:
-        NIacc = -NIacc
+    # raise an error if the signals are not the same length
+    N = len(niAcc)
+    if N != len(vnAcc):
+        raise StandardError('Signals are not the same length!')
+
+    # make a time vector
+    time = time_vector(N, sampleRate)
+
+    # scale the NI signal from volts to m/s**2, and switch the sign
+    niSig = -(niAcc - threeVolts / 2.) / (300. / 1000.) * 9.81
+    vnSig = vnAcc
+
+    # some constants for find_bump
+    wheelbase = 1.02
+    bumpLength = 1.
+    cutoff = 50.
+    # filter the NI Signal
+    filNiSig = butterworth(niSig, cutoff, sampleRate)
+    # find the bump in the filtered NI signal
+    niBump =  find_bump(filNiSig, sampleRate, speed, wheelbase, bumpLength)
+
+    # remove the nan's in the VN signal and the time
+    v = vnSig[np.nonzero(np.isnan(vnSig) == False)]
+    t = time[np.nonzero(np.isnan(vnSig) == False)]
+    # fit a spline through the data
+    vn_spline = UnivariateSpline(t, v, k=3, s=0)
+    # and filter it
+    filVnSig = butterworth(vn_spline(time), cutoff, sampleRate)
+    # and find the bump in the filtered VN signal
+    vnBump = find_bump(filVnSig, sampleRate, speed, wheelbase, bumpLength)
+
+    # get an initial guess for the time shift based on the bump indice
+    guess = (niBump[1] - vnBump[1]) / float(sampleRate)
+
+    # find the section that the bump belongs to
+    indices, arrays = split_around_nan(vnSig)
+    for pair in indices:
+        if pair[0] <= vnBump[1] < pair[1]:
+            bSec = pair
 
     # subtract the mean and normalize both signals
-    niSig = normalize(subtract_mean(NIacc))
-    vnSig = normalize(subtract_mean(VNacc))
+    niSig = normalize(subtract_mean(niSig))
+    vnSig = normalize(subtract_mean(vnSig))
 
-    # raise an error if the signals are not the same length
-    N = len(niSig)
-    if N != len(vnSig):
-        raise StandardError
+    niBumpSec = niSig[bSec[0]:bSec[1]]
+    vnBumpSec = vnSig[bSec[0]:bSec[1]]
+    timeBumpSec = time[bSec[0]:bSec[1]]
 
-    time = time_vector(N, float(Fs))
+    if len(niBumpSec) < 200:
+        raise Warning('The bump section is mighty small.')
 
-    # Set up the error landscape, error vs tau
+    # set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 0.5 seconds
     tauRange = np.linspace(0., .5, num=500)
     error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
-        error[i] = sync_error(val, niSig, vnSig, time)
+        error[i] = sync_error(val, niBumpSec, vnBumpSec, timeBumpSec)
 
     # find initial condition from landscape
     tau0 = tauRange[np.argmin(error)]
@@ -629,7 +653,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
 
     print "Using %f as the guess for minimization." % tau0
 
-    tau  = fmin(sync_error, tau0, args=(niSig, vnSig, time))[0]
+    tau  = fmin(sync_error, tau0, args=(niBumpSec, vnBumpSec, timeBumpSec))[0]
 
     print "This is what came out of the minimization:", tau
 
@@ -638,7 +662,7 @@ def find_timeshift(NIacc, VNacc, Fs, guess=None, sign=True):
         tau = tau0
         print "Bad minimizer!! Using the guess, %f, instead." % tau
 
-    return tau, error
+    return tau
 
 def butterworth(data, freq, sampRate, order=2, axis=-1):
     """
@@ -905,6 +929,10 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
             else:
                 vnData.append(nanRow)
                 vnData.append(nanRow)
+
+    # remove extra values so that the number of samples equals the number of
+    # samples of the VN-100 output
+    vnData = vnData[:len(vnOutput)]
 
     return np.transpose(np.array(vnData))
 

@@ -9,7 +9,7 @@ from scipy.interpolate import UnivariateSpline
 import DataProcessor as dp
 
 # pick a run number
-runid = 105
+runid = 124
 print "RunID:", runid
 
 # open the data file
