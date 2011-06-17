@@ -32,74 +32,74 @@ class Run():
 
         '''
 
-        # get the run data table
-        datatable = datafile.root.data.datatable
-
-        # these are the columns that need to be calculated
-        processedCols = ['FrameAccelerationX',
-                         'FrameAccelerationY',
-                         'FrameAccelerationZ',
-                         'PitchRate',
-                         'PullForce',
-                         'RearWheelRate',
-                         'RollAngle',
-                         'RollRate',
-                         'SteerAngle',
-                         'SteerRate',
-                         'SteerTorque',
-                         'tau',
-                         'YawRate']
-
-        # make a container for the data
-        self.data = {}
+        # get the tables
+        dataTable = datafile.root.data.datatable
+        signalTable = datafile.root.data.signaltable
 
         # get the row number for this particular run id
-        rownum = get_row_num(runid, datatable)
+        rownum = get_row_num(runid, dataTable)
 
-        # grab the data for the run number and column name
-        for col in datatable.colnames:
-            coldata = get_cell(datatable, col, rownum)
-            self.data[col] = coldata
+        # make some dictionaries to store all the data
+        self.data = {}
+        self.rawDataSignals = {}
+
+        # store the current data for this run
+        for col in dataTable.colnames:
+            self.data[col] = get_cell(dataTable, col, rownum)
 
         # tell the user about the run
         self.print_run_info()
 
         if forceRecalc == True:
-            # if the time shift hasn't been calculated, do it now
-            curtau = datatable[rownum]['tau']
-            print 'curtau', curtau
-            sampleRate = get_cell(datatable, 'NISampleRate', rownum)
-            if curtau == 0. or forceRecalc == True:
-                # calculate tau for this run
-                niAcc = get_cell(datatable, 'FrameAccelY', rownum)
-                vnAcc = get_cell(datatable, 'AccelerationZ', rownum)
-                speed = get_cell(datatable, 'Speed', rownum)
-                threeVolts = get_cell(datatable, 'ThreeVolts', rownum)
-                tau = find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed)
-                print 'This is tau', tau
+            # calculate tau for this run
+            self.data['tau'] = find_timeshift(self.data['FrameAccelY'],
+                                              self.data['AccelerationZ'],
+                                              self.data['NISampleRate'],
+                                              self.data['ThreeVolts'],
+                                              self.data['Speed'])
 
-                # store tau in the the table
-                datatable.cols.tau[rownum] = tau
-                datatable.flush()
-            else:
-                tau = curtau
+            # truncate all the raw data signals
+            self.truncate_signals(signalTable)
 
-            cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
-                    'CalibData', 'calibdata.h5'))
+            ###cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
+                    ###'CalibData', 'calibdata.h5'))
+###
+        #### these are the columns that need to be calculated
+        ###processedCols = [x['signal'] for x in signalTable.iterrows()
+                         ###if x['isRaw'] == False]
+            ###for col in self.data.keys():
+                #### now check to see if we need to process the data
+                ###if col in processedCols: # and np.sum(coldata) == 0.:
+                    ###print col, 'needs some processing'
+                    ###if col == 'tau':
+                        ###pass
+                    ###elif col in cdat.keys():
+                        ###print 'Processing', col
+                        ###voltage = get_cell(self.dataTable, cdat[col]['signal'], self.rownum)
+                        ###scaled = linear_calib(voltage, cdat[col])
+                        ###coldata = truncate_data(scaled, 'NI', sampleRate, tau)
+###
+                ###self.data[col] = coldata
 
-            for col in datatable.colnames:
-                # now check to see if we need to process the data
-                if col in processedCols: # and np.sum(coldata) == 0.:
-                    print col, 'needs some processing'
-                    if col == 'tau':
-                        pass
-                    elif col in cdat.keys():
-                        print 'Processing', col
-                        voltage = get_cell(datatable, cdat[col]['signal'], rownum)
-                        scaled = linear_calib(voltage, cdat[col])
-                        coldata = truncate_data(scaled, 'NI', sampleRate, tau)
+    def truncate_signals(self, signalTable):
+        '''Truncates and shifts the listed data signals based on the currently stored
+        value of tau.
 
-                self.data[col] = coldata
+        Parameters
+        ----------
+        signalTable : pytables table
+
+
+        '''
+        for source in ['VN', 'NI']:
+            signalNames = [x['signal'] for x in signalTable.iterrows()
+                           if x['source'] == source]
+
+            for rawSig in signalNames:
+                self.data[rawSig + '-Truncated'] = truncate_data(
+                    self.data[rawSig], source,
+                    self.data['NISampleRate'],
+                    self.data['tau'])
 
     def plot(self, *args):
         '''
