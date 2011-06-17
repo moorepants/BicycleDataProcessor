@@ -61,25 +61,27 @@ class Run():
             # truncate all the raw data signals
             self.truncate_signals(signalTable)
 
-            ###cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
-                    ###'CalibData', 'calibdata.h5'))
-###
-        #### these are the columns that need to be calculated
-        ###processedCols = [x['signal'] for x in signalTable.iterrows()
-                         ###if x['isRaw'] == False]
-            ###for col in self.data.keys():
-                #### now check to see if we need to process the data
-                ###if col in processedCols: # and np.sum(coldata) == 0.:
-                    ###print col, 'needs some processing'
-                    ###if col == 'tau':
-                        ###pass
-                    ###elif col in cdat.keys():
-                        ###print 'Processing', col
-                        ###voltage = get_cell(self.dataTable, cdat[col]['signal'], self.rownum)
-                        ###scaled = linear_calib(voltage, cdat[col])
-                        ###coldata = truncate_data(scaled, 'NI', sampleRate, tau)
-###
-                ###self.data[col] = coldata
+            cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
+                    'CalibData', 'calibdata.h5'))
+
+            # these are the columns that need to be calculated
+            processedCols = [x['signal'] for x in signalTable.iterrows()
+                             if x['isRaw'] == False]
+
+            pairs = [(k, v['signal']) for k, v in cdat.items()]
+            calibSources = [x[1] for x in pairs]
+            print calibSources
+            calibOutputs = [x[0] for x in pairs]
+            print calibOutputs
+
+            for i, col in enumerate(processedCols):
+                if col == 'tau':
+                    pass
+                elif col in calibOutputs:
+                    print 'Processing', col
+                    voltage = self.data[calibSources[calibOutputs.index(col)] + '-Truncated']
+                    scaled = linear_calib(voltage, cdat[col])
+                    self.data[col] = scaled
 
     def truncate_signals(self, signalTable):
         '''Truncates and shifts the listed data signals based on the currently stored
@@ -88,7 +90,6 @@ class Run():
         Parameters
         ----------
         signalTable : pytables table
-
 
         '''
         for source in ['VN', 'NI']:
@@ -110,17 +111,21 @@ class Run():
         args* : string
             These should be strings that correspond to processed data
             columns.
+        truncated : boolean
+            If true, then the plots will show the data that has been shifted
+            and truncated.
 
         '''
-        samplerate = self.data['NISampleRate']
-        n = len(self.data[args[0]])
-        t = np.linspace(0., n/samplerate, num=n)
+        sampleRate = self.data['NISampleRate']
 
         for i, arg in enumerate(args):
-            if arg == 'SteerTorque':
-                plt.plot(t, size_vector(self.data[arg]*10., n))
-            else:
-                plt.plot(t, size_vector(self.data[arg], n))
+            try:
+                time = time_vector(len(self.data[arg + '-Truncated']),
+                                   sampleRate)
+                plt.plot(time, self.data[arg + '-Truncated'])
+            except KeyError:
+                time = time_vector(len(self.data[arg]), sampleRate)
+                plt.plot(time, self.data[arg])
 
         plt.legend(args)
 
@@ -156,6 +161,7 @@ class Run():
         print 'Loading run #', self.data['RunID']
         print "Environment:", self.data['Environment']
         print "Rider:", self.data['Rider']
+        print "Bicycle:", self.data['Bicycle']
         print "Speed:", self.data['Speed']
         print "Maneuver:", self.data['Maneuver']
         print "Notes:", self.data['Notes']
