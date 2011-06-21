@@ -2,6 +2,7 @@
 
 import os
 import re
+import datetime
 from operator import xor
 import tables as tab
 import numpy as np
@@ -166,6 +167,60 @@ class Run():
         print "Maneuver:", self.data['Maneuver']
         print "Notes:", self.data['Notes']
         print "-" * 79
+
+class Sensor():
+    '''This class handles coverting the sensor raw data signals to signals in
+    meaningful units.'''
+
+    def __init__(self, name):
+        '''Initializes this sensor class.
+
+        Parameters
+        ----------
+        name : string
+            The camelcase name of the sensor (e.g. SteerTorqueSensor).
+
+        '''
+        self.name = name
+        self.calibrationData = self.get_calibration_data()
+
+    def get_calibration_data(self):
+        '''Returns a dictionary of calibration data for the sensor.'''
+
+    def scale(signal, date, supply=None):
+        '''Returns the scaled signal based on the calibration data for the
+        supplied date.
+
+        Parameters
+        ----------
+        signal : ndarray, shape (n,)
+            The output signal from the sensor.
+        date : string
+            Matlab date string (e.g. '21-Mar-2011 14:45:54').
+        supply : ndarray, shape(n,), optional
+            The supply voltage to the sensor.
+
+        Returns
+        -------
+        : ndarray (n,)
+            Scaled signal.
+
+        '''
+
+def matlab_date_to_object(matDate):
+    '''Returns a date time object based on a Matlab datestr() output.
+
+    Parameters
+    ----------
+    matDate : string
+        String in the form '21-Mar-2011 14:45:54'.
+
+    Returns
+    -------
+    python datetime object
+
+    '''
+    return datetime.datetime.strptime(string, '%d-%b-%Y %H:%M:%S')
 
 def split_around_nan(sig):
     '''
@@ -935,6 +990,14 @@ def create_signal_table_class():
 
     return SignalTable
 
+def create_calibration_table_class():
+    class CalibrationTable(tab.IsDescription):
+        sensorType = tab.StringCol(20)
+        x = tab.Float32Col(shape=(30, 400), pos=i)
+        y = tab.Float32Col(shape=(30, 400), pos=i)
+        x = tab.Float32Col(shape=(30, 400), pos=i)
+
+
 def create_run_table_class(filteredrun, unfilteredrun):
     '''Returns a class that is used for the table description for raw data
     for each run.
@@ -1222,45 +1285,34 @@ def get_run_data(pathtofile):
 
     return rundata
 
-def get_calib_data(pathtofile):
+def get_calib_data(pathToFile):
     '''
     Returns calibration data from the run h5 files using pytables and
     formats it as a dictionairy.
 
     Parameters
     ----------
-    pathtofile : string
+    pathToFile : string
         The path to the h5 file that contains the calibration data, normally:
-        pathtofile = '../BicycleDAQ/data/CalibData/calibdata.h5'
+        pathtofile = '../BicycleDAQ/data/CalibData/h5/00000.h5'
 
     Returns
     -------
-    calibdata : dictionary
+    calibData : dictionary
         A dictionary that looks similar to how the data was stored in Matlab.
 
     '''
 
-    # open the file
-    calibfile = tab.openFile(pathtofile)
+    calibFile = tab.openFile(pathToFile)
 
-    # intialize a dictionary for storage
-    calibdata = {}
+    calibData = {}
 
-    # Specify names to check
-    namelist = ['name' + str(i) for i in range(1, 7)]
-    fieldnamelist = []
+    for thing in calibFile.root.data:
+        if len(thing.read().flatten()) == 1:
+            calibData[thing.name] = thing.read()[0]
+        else:
+            calibData[thing.name] = thing.read()
 
-    # Generate dictionary structure
-    for a in calibfile.root.calibdata.__iter__():
-        if a.name in namelist:
-            calibdata[str(a.read()[0])] = {}
-            fieldnamelist.append(str(a.read()[0]))
+    calibFile.close()
 
-    # Fill dictionary structure
-    for a in calibfile.root.calibdata.__iter__():
-        i = int(re.sub('\D', '', a.name)) - 1
-        calibdata[fieldnamelist[i]][re.sub('\d', '', a.name)] = a.read()[0]
-
-    calibfile.close()
-
-    return calibdata
+    return calibData
