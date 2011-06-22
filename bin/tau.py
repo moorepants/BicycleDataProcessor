@@ -1,5 +1,8 @@
 #!/usr/bin/env python
-'''This script is to test out the best way to do the bump detection.'''
+'''This script is to test out the best way to do the bump detection.
+
+This is now broken because I've moved this code into DataProcessor.py and
+find_timeshift works differently.'''
 
 import tables as tab
 import numpy as np

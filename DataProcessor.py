@@ -811,31 +811,53 @@ def unsize_vector(vector, m):
         raise StandardError("Something's wrong with the unsizing")
     return oldvec
 
-def size_array(arr, arrShape):
+def size_array(arr, desiredShape):
+    '''Returns a one or two dimensional array that has either been padded with
+    nans or reduced in shape.
 
+    Parameters
+    ----------
+    arr : ndarray, shape(n,) or shape(n,m)
+    desiredShape : integer or tuple
+        If arr is one dimensinal, then desired shape can be a positive integer,
+        else it needs to be a tuple of two positive integers.
+
+    '''
+
+    # this only works for arrays up to dimension 2
+    message = "size_array only works with arrays of dimension 1 or 2."
     if len(arr.shape) > 2:
-        raise ValueError("size_array only works with arrays of dimension 1 or 2.")
+        raise ValueError(message)
 
     message = "The array and the sizing must be of the same dimension."
     try:
-        if len(arr.shape) != len(arrShape):
+        if len(arr.shape) != len(desiredShape):
             raise ValueError(message)
     except TypeError:
         if len(arr.shape) != 1:
             raise ValueError(message)
 
+    # if the arr is one dimensional
     if len(arr.shape) == 1:
-        if arr.shape[0] < arrShape:
-            newArr = np.ones(arrShape) * np.nan
+        if arr.shape[0] < desiredShape:
+            newArr = np.ones(desiredShape) * np.nan
             newArr[:arr.shape[0]] = arr
         else:
-            newArr = arr[:arrShape]
+            newArr = arr[:desiredShape]
+    # else it is two dimensional
     else:
-        # first pad the rows
-        newArr = np.ones(arrShape[0], arr.shape[1]) * np.nan
-        newArr[:arr.shape[0], :arr.shape[1]] = arr
-        except:
-            newArr = arr[:arrShape[0], :arrShape[1]]
+        # first adjust the rows
+        if desiredShape[0] > arr.shape[0]:
+            adjRows = np.ones((desiredShape[0], arr.shape[1])) * np.nan
+            adjRows[:arr.shape[0]] = arr
+        else:
+            adjRows = arr[:desiredShape[0]]
+        # now adjust the columns
+        if desiredShape[1] > arr.shape[1]:
+            newArr = np.ones((adjRows.shape[0], desiredShape[1])) * np.nan
+            newArr[:, :arr.shape[1]] = adjRows
+        else:
+            newArr = adjRows[:, :desiredShape[1]]
 
     return newArr
 
