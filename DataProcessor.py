@@ -811,6 +811,10 @@ def unsize_vector(vector, m):
         raise StandardError("Something's wrong with the unsizing")
     return oldvec
 
+size_array(arr, arShape):
+
+    newArr = np.ones(arShape) * np.nan
+
 def size_vector(vector, m):
     '''Returns a vector with nan's padded on to the end or a slice of the
     vector if length is less than the length of the vector.
@@ -830,7 +834,7 @@ def size_vector(vector, m):
     nsamp = len(vector)
     # if the desired length is larger then pad witn nan's
     if m > nsamp:
-        nans = np.ones(m-nsamp)*np.nan
+        nans = np.ones(m - nsamp) * np.nan
         newvec = np.append(vector, nans)
     elif m < nsamp:
         newvec = vector[:m]
@@ -841,7 +845,7 @@ def size_vector(vector, m):
     return newvec
 
 def fill_tables(datafile='InstrumentedBicycleData.h5',
-                pathToH5='../BicycleDAQ/data/h5'):
+                pathToData='../BicycleDAQ/data'):
     '''Adds all the data from the hdf5 files in the h5 directory to the tables.
 
     Parameters
@@ -853,30 +857,31 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
 
     # open the hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
-    # get the table
-    datatable = data.root.data.datatable
-    # get the row
-    row = datatable.row
 
+    #### get the table
+    ###datatable = data.root.data.datatable
+    #### get the row
+    ###row = datatable.row
     # load the files from the h5 directory
-    files = sorted(os.listdir(pathToH5))
-
-    # fill the rows with data
-    for run in files:
-        print 'Adding run: %s' % run
-        rundata = get_run_data(os.path.join(pathToH5, run))
-        for par, val in rundata['par'].items():
-            row[par] = val
-        # only take the first 12000 samples for all runs
-        for i, col in enumerate(rundata['NICols']):
-            try: # there are no roll pot measurements
-                row[col] = size_vector(rundata['NIData'][i], 12000)
-            except:
-                print "There is no %s measurement" % col
-        for i, col in enumerate(rundata['VNavCols']):
-            row[col] = size_vector(rundata['VNavData'][i], 12000)
-        row.append()
-    datatable.flush()
+    pathToRunH5 = os.path.join(pathToData, 'h5')
+    ###files = sorted(os.listdir(pathToRunH5))
+###
+    #### fill the rows with data
+    ###for run in files:
+        ###print 'Adding run: %s' % run
+        ###rundata = get_run_data(os.path.join(pathToH5, run))
+        ###for par, val in rundata['par'].items():
+            ###row[par] = val
+        #### only take the first 12000 samples for all runs
+        ###for i, col in enumerate(rundata['NICols']):
+            ###try: # there are no roll pot measurements
+                ###row[col] = size_vector(rundata['NIData'][i], 12000)
+            ###except:
+                ###print "There is no %s measurement" % col
+        ###for i, col in enumerate(rundata['VNavCols']):
+            ###row[col] = size_vector(rundata['VNavData'][i], 12000)
+        ###row.append()
+    ###datatable.flush()
 
     # fill in the signal table
     signaltable = data.root.data.signaltable
@@ -898,7 +903,7 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
                      'YawRate']
 
     # get two example runs
-    filteredRun, unfilteredRun = get_two_runs(pathToH5)
+    filteredRun, unfilteredRun = get_two_runs(pathToRunH5)
 
     niCols = filteredRun['NICols']
     # combine the VNavCols from unfiltered and filtered
@@ -923,6 +928,28 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
         row.append()
 
     signaltable.flush()
+
+    # fill in the calibration table
+    calibrationtable = data.root.data.calibrationtable
+    row = calibrationtable.row
+
+    # load the files from the h5 directory
+    pathToCalibH5 = os.path.join(pathToData, 'CalibData', 'h5')
+    files = sorted(os.listdir(pathToCalibH5))
+
+    for f in files:
+        print f
+        calibDict = get_calib_data(os.path.join(pathToCalibH5, f))
+        for k, v in calibDict.items():
+            print k
+            try:
+                print v.shape
+            except:
+                pass
+            row[k] = v
+        row.append()
+
+    calibrationtable.flush()
 
     data.close()
 
@@ -958,24 +985,30 @@ def create_database(filename='InstrumentedBicycleData.h5',
 
     # generate the signal table description class
     SignalTable = create_signal_table_class()
-
     # add the signal table to the group
     sTable = data.createTable(rgroup, 'signaltable',
                               SignalTable, 'Signal Information')
     sTable.flush()
 
+    # generate the calibration table description class
+    CalibrationTable = create_calibration_table_class()
+    # add the calibration table to the group
+    cTable = data.createTable(rgroup, 'calibrationtable',
+                              CalibrationTable, 'Calibration Information')
+    cTable.flush()
+
     # get two example runs
     filteredRun, unfilteredRun = get_two_runs(pathToH5)
-
     # generate the table description class
     RunTable = create_run_table_class(filteredRun, unfilteredRun)
     # setup up a compression filter
     compression = tab.Filters(complevel=1, complib='zlib')
     # add the data table to this group
     rtable = data.createTable(rgroup, 'datatable',
-                              RunTable, 'Primary Data Table',
+                              RunTable, 'Run Data',
                               filters=compression)
     rtable.flush()
+
     data.close()
 
 def create_signal_table_class():
@@ -991,12 +1024,29 @@ def create_signal_table_class():
     return SignalTable
 
 def create_calibration_table_class():
-    class CalibrationTable(tab.IsDescription):
-        sensorType = tab.StringCol(20)
-        x = tab.Float32Col(shape=(30, 400), pos=i)
-        y = tab.Float32Col(shape=(30, 400), pos=i)
-        x = tab.Float32Col(shape=(30, 400), pos=i)
+    '''Creates a class that is used to describe the table containing the
+    calibration data.'''
 
+    class CalibrationTable(tab.IsDescription):
+        accuracy = tab.StringCol(10)
+        bias = tab.Float32Col()
+        calibrationID = tab.StringCol(5)
+        calibrationSupplyVoltage = tab.Float32Col()
+        name = tab.StringCol(20)
+        notes = tab.StringCol(500)
+        offset = tab.Float32Col()
+        runSupplyVoltage = tab.StringCol(20)
+        rsq = tab.Float32Col()
+        sensorType = tab.StringCol(20)
+        signals = tab.StringCol(20, shape=(3,))
+        slope = tab.Float32Col()
+        timeStamp = tab.StringCol(21)
+        units = tab.StringCol(20)
+        v = tab.Float32Col(shape=(50, 400))
+        x = tab.Float32Col(shape=(50, 400))
+        y = tab.Float32Col(shape=(50,))
+
+    return CalibrationTable
 
 def create_run_table_class(filteredrun, unfilteredrun):
     '''Returns a class that is used for the table description for raw data
