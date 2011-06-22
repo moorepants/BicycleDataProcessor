@@ -811,9 +811,33 @@ def unsize_vector(vector, m):
         raise StandardError("Something's wrong with the unsizing")
     return oldvec
 
-size_array(arr, arShape):
+def size_array(arr, arrShape):
 
-    newArr = np.ones(arShape) * np.nan
+    if len(arr.shape) > 2:
+        raise ValueError("size_array only works with arrays of dimension 1 or 2.")
+
+    message = "The array and the sizing must be of the same dimension."
+    try:
+        if len(arr.shape) != len(arrShape):
+            raise ValueError(message)
+    except TypeError:
+        if len(arr.shape) != 1:
+            raise ValueError(message)
+
+    if len(arr.shape) == 1:
+        if arr.shape[0] < arrShape:
+            newArr = np.ones(arrShape) * np.nan
+            newArr[:arr.shape[0]] = arr
+        else:
+            newArr = arr[:arrShape]
+    else:
+        # first pad the rows
+        newArr = np.ones(arrShape[0], arr.shape[1]) * np.nan
+        newArr[:arr.shape[0], :arr.shape[1]] = arr
+        except:
+            newArr = arr[:arrShape[0], :arrShape[1]]
+
+    return newArr
 
 def size_vector(vector, m):
     '''Returns a vector with nan's padded on to the end or a slice of the
