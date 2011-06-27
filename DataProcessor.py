@@ -829,33 +829,36 @@ def size_array(arr, desiredShape):
     if len(arr.shape) > 2:
         raise ValueError(message)
 
-    message = "The array and the sizing must be of the same dimension."
     try:
-        if len(arr.shape) != len(desiredShape):
-            raise ValueError(message)
+        desiredShape[1]
     except TypeError:
-        if len(arr.shape) != 1:
-            raise ValueError(message)
+        desiredShape = (desiredShape, 1)
 
-    # if the arr is one dimensional
-    if len(arr.shape) == 1:
-        if arr.shape[0] < desiredShape:
-            newArr = np.ones(desiredShape) * np.nan
-            newArr[:arr.shape[0]] = arr
-        else:
-            newArr = arr[:desiredShape]
-    # else it is two dimensional
+    try:
+        arr.shape[1]
+        arrShape = arr.shape
+    except IndexError:
+        arrShape = (arr.shape[0], 1)
+
+    print desiredShape
+
+    # first adjust the rows
+    if desiredShape[0] > arrShape[0]:
+        try:
+            adjRows = np.ones((desiredShape[0], arrShape[1])) * np.nan
+        except IndexError:
+            adjRows = np.ones(desiredShape[0]) * np.nan
+        adjRows[:arrShape[0]] = arr
     else:
-        # first adjust the rows
-        if desiredShape[0] > arr.shape[0]:
-            adjRows = np.ones((desiredShape[0], arr.shape[1])) * np.nan
-            adjRows[:arr.shape[0]] = arr
-        else:
-            adjRows = arr[:desiredShape[0]]
+        adjRows = arr[:desiredShape[0]]
+
+    newArr = adjRows
+
+    if desiredShape[1] > 1:
         # now adjust the columns
-        if desiredShape[1] > arr.shape[1]:
+        if desiredShape[1] > arrShape[1]:
             newArr = np.ones((adjRows.shape[0], desiredShape[1])) * np.nan
-            newArr[:, :arr.shape[1]] = adjRows
+            newArr[:, :arrShape[1]] = adjRows
         else:
             newArr = adjRows[:, :desiredShape[1]]
 
@@ -987,12 +990,15 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
         print f
         calibDict = get_calib_data(os.path.join(pathToCalibH5, f))
         for k, v in calibDict.items():
-            print k
-            try:
-                print v.shape
-            except:
-                pass
-            row[k] = v
+            print k, v
+            if k == 'x' or k == 'v':
+                desiredShape = (30, 400)
+                row[k] = size_array(v, desiredShape)
+            elif k == 'y':
+                desiredShape = 30
+                row[k] = size_array(v, desiredShape)
+            else:
+                row[k] = v
         row.append()
 
     calibrationtable.flush()
@@ -1081,16 +1087,17 @@ def create_calibration_table_class():
         name = tab.StringCol(20)
         notes = tab.StringCol(500)
         offset = tab.Float32Col()
-        runSupplyVoltage = tab.StringCol(20)
+        runSupplyVoltage = tab.Float32Col()
+        runSupplyVoltageSource = tab.StringCol(10)
         rsq = tab.Float32Col()
         sensorType = tab.StringCol(20)
         signals = tab.StringCol(20, shape=(3,))
         slope = tab.Float32Col()
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
-        v = tab.Float32Col(shape=(50, 400))
-        x = tab.Float32Col(shape=(50, 400))
-        y = tab.Float32Col(shape=(50,))
+        v = tab.Float32Col(shape=(30, 400))
+        x = tab.Float32Col(shape=(30, 400))
+        y = tab.Float32Col(shape=(30,))
 
     return CalibrationTable
 
@@ -1407,7 +1414,10 @@ def get_calib_data(pathToFile):
         if len(thing.read().flatten()) == 1:
             calibData[thing.name] = thing.read()[0]
         else:
-            calibData[thing.name] = thing.read()
+            if thing.name in ['x', 'v']:
+                calibData[thing.name] = np.mean(thing.read(), 1)
+            else:
+                calibData[thing.name] = thing.read()
 
     calibFile.close()
 
