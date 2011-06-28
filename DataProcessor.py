@@ -13,6 +13,62 @@ from scipy.signal import butter, lfilter
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 
+class Signal():
+    '''A class for collecting the data for a single signal in a run.'''
+    def __init__(self, runid, name, database):
+
+        # get the tables
+        dTab = database.root.data.datatable
+        sTab = database.root.data.signaltable
+        cTab = database.root.data.calibrationtable
+
+        # get the row number for this particular run id
+        rownum = get_row_num(runid, dTab)
+
+        self.runid = runid
+        self.name = name
+        self.units = [row['units']
+                      for row in sTab.where('signal == name')][0]
+        self.source = [row['source']
+                       for row in sTab.where('signal == name')][0]
+
+        try:
+            self.sensor = Sensor(self.name)
+        except KeyError:
+            print "Bad sensor name"
+
+        self.timeSeries = get_cell(dTab, name, rownum)
+
+        self.numberOfSamples = len(self.timeSeries)
+
+        if self.source == 'NI':
+            sampRateCol = 'NISampleRate'
+        elif self.source == 'VN':
+            sampRateCol = 'VNavSampleRate'
+        else:
+            raise ValueError('{0} is not a valid source.'.format(self.source))
+
+        self.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+
+    def plot(self):
+        '''Plots and returns the time series versus time.'''
+        time = time_vector(self.numberOfSamples, self.sampleRate)
+        line = plt.plot(time, self.timeSeries)
+        plt.xlabel('Time [s]')
+        plt.ylabel(self.units)
+        plt.title('{0} signal during run {1}'.format(self.name,
+                  str(self.runid)))
+        plt.show()
+        return line
+
+    def frequency(self):
+        '''Returns the frequency content of the signal.'''
+        raise NotImplementedError('This is a place holder.')
+
+    def filter(self):
+        '''Returns the filtered signal.'''
+        raise NotImplementedError('This is a place holder.')
+
 class Run():
     '''The fundamental class for a run.'''
 
@@ -983,7 +1039,6 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
         row.append()
     datatable.flush()
 
-
     print "Loading signal data."
     # fill in the signal table
     signaltable = data.root.data.signaltable
@@ -998,6 +1053,7 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
                      'RearWheelRate',
                      'RollAngle',
                      'RollRate',
+                     'Speed',
                      'SteerAngle',
                      'SteerRate',
                      'SteerTorque',
@@ -1018,12 +1074,25 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
             row['source'] = 'NI'
             row['isRaw'] = True
             row['units'] = 'volts'
+            if sig.startswith('FrameAccel') or sig == 'SteerRateGyro':
+                row['calibration'] = 'bias'
+            elif sig.endswith('Potentiometer'):
+                row['calibration'] = 'interceptStar'
+            elif sig in ['WheelSpeedMotor', 'SteerTorqueSensor',
+                         'PullForceBridge']:
+                row['calibration'] = 'intercept'
+            elif sig[:-1].endswith('Bridge'):
+                row['calibration'] = 'matrix'
+            else:
+                row['calibration'] = 'none'
         elif sig in vnCols:
             row['source'] = 'VN'
             row['isRaw'] = True
+            row['calibration'] = 'none'
         elif sig in processedCols:
             row['source'] = 'NA'
             row['isRaw'] = False
+            row['calibration'] = 'na'
         else:
             raise KeyError('{0} is not raw or processed'.format(sig))
 
@@ -1119,10 +1188,12 @@ def create_signal_table_class():
     information about the signals.'''
 
     class SignalTable(tab.IsDescription):
-        signal = tab.StringCol(20)
-        units = tab.StringCol(20)
-        source = tab.StringCol(2)
+        calibration = tab.StringCol(20)
         isRaw = tab.BoolCol()
+        sensor = tab.StringCol(20)
+        signal = tab.StringCol(20)
+        source = tab.StringCol(2)
+        units = tab.StringCol(20)
 
     return SignalTable
 
@@ -1142,7 +1213,7 @@ def create_calibration_table_class():
         runSupplyVoltageSource = tab.StringCol(10)
         rsq = tab.Float32Col(dflt=np.nan)
         sensorType = tab.StringCol(20)
-        signals = tab.StringCol(20, shape=(3,))
+        signal = tab.StringCol(20)
         slope = tab.Float32Col(dflt=np.nan)
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
@@ -1200,6 +1271,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
                          'RearWheelRate',
                          'RollAngle',
                          'RollRate',
+                         'Speed',
                          'SteerAngle',
                          'SteerRate',
                          'SteerTorque',
