@@ -62,27 +62,27 @@ class Run():
             # truncate all the raw data signals
             self.truncate_signals(signalTable)
 
-            cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
-                    'CalibData', 'calibdata.h5'))
+            ###cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
+                    ###'CalibData', 'calibdata.h5'))
 
-            # these are the columns that need to be calculated
-            processedCols = [x['signal'] for x in signalTable.iterrows()
-                             if x['isRaw'] == False]
-
-            pairs = [(k, v['signal']) for k, v in cdat.items()]
-            calibSources = [x[1] for x in pairs]
-            print calibSources
-            calibOutputs = [x[0] for x in pairs]
-            print calibOutputs
-
-            for i, col in enumerate(processedCols):
-                if col == 'tau':
-                    pass
-                elif col in calibOutputs:
-                    print 'Processing', col
-                    voltage = self.data[calibSources[calibOutputs.index(col)] + '-Truncated']
-                    scaled = linear_calib(voltage, cdat[col])
-                    self.data[col] = scaled
+            #### these are the columns that need to be calculated
+            ###processedCols = [x['signal'] for x in signalTable.iterrows()
+                             ###if x['isRaw'] == False]
+###
+            ###pairs = [(k, v['signal']) for k, v in cdat.items()]
+            ###calibSources = [x[1] for x in pairs]
+            ###print calibSources
+            ###calibOutputs = [x[0] for x in pairs]
+            ###print calibOutputs
+###
+            ###for i, col in enumerate(processedCols):
+                ###if col == 'tau':
+                    ###pass
+                ###elif col in calibOutputs:
+                    ###print 'Processing', col
+                    ###voltage = self.data[calibSources[calibOutputs.index(col)] + '-Truncated']
+                    ###scaled = linear_calib(voltage, cdat[col])
+                    ###self.data[col] = scaled
 
     def truncate_signals(self, signalTable):
         '''Truncates and shifts the listed data signals based on the currently stored
@@ -172,22 +172,39 @@ class Sensor():
     '''This class handles coverting the sensor raw data signals to signals in
     meaningful units.'''
 
-    def __init__(self, name):
+    def __init__(self, name, datafile='InstrumentedBicycleData.h5'):
         '''Initializes this sensor class.
 
         Parameters
         ----------
         name : string
-            The camelcase name of the sensor (e.g. SteerTorqueSensor).
+            The CamelCase name of the sensor (e.g. SteerTorqueSensor).
 
         '''
         self.name = name
-        self.calibrationData = self.get_calibration_data()
+        self.store_calibration_data(datafile)
 
-    def get_calibration_data(self):
+    def store_calibration_data(self, datafile):
         '''Returns a dictionary of calibration data for the sensor.'''
 
-    def scale(signal, date, supply=None):
+        dataFile = tab.openFile(datafile)
+
+        calibTable = dataFile.root.data.calibrationtable
+
+        self.data = {}
+
+        for row in calibTable.iterrows():
+            if self.name == row['name']:
+                self.data[row['calibrationID']] = {}
+                for col in calibTable.colnames:
+                    self.data[row['calibrationID']][col] = row[col]
+        if self.data == {}:
+            raise KeyError(('{0} is not a valid sensor ' +
+                           'name').format(self.name))
+
+        dataFile.close()
+
+    def scale(self, runData):
         '''Returns the scaled signal based on the calibration data for the
         supplied date.
 
@@ -206,6 +223,39 @@ class Sensor():
             Scaled signal.
 
         '''
+        # pick the largest calibration date without surpassing the run date
+        runDate = matlab_date_to_object(runData['DateTime'])
+        dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
+                       for k, v in self.data.iteritems()]
+        dateIdPairs.sort(key=lambda x: x[1], reverse=True)
+        calibDate = dateIdPairs[0][1]
+        while calibDate > runDate:
+            calibDate = dateIdPairs.pop[0][1]
+        calibData = self.data[dataIdPairs[0][0]]
+
+        sensorSignal = runData[self.name]
+        slope = calibData['slope']
+        bias = calibData['bias']
+        intercept = calibData['offset']
+        calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
+        try:
+            runSupplyVoltage = runData[calibData['runSupplyVoltageSource']]
+        except KeyError:
+            runSupplyVoltage = calibData['runSupplyVoltage']
+
+        if calibData['sensorType'] == 'potentiometer':
+            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
+                                slope * sensorSignal + intercept)
+        elif np.isnan(bias):
+            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
+                                (slope * sensorSignal + intercept))
+        elif not np.isnan(bias):
+            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
+                                slope * (sensorSignal - bias))
+        else:
+            raise StandardError("None of the calibration equations worked.")
+
+        return calibratedSignal
 
 def matlab_date_to_object(matDate):
     '''Returns a date time object based on a Matlab datestr() output.
@@ -220,7 +270,7 @@ def matlab_date_to_object(matDate):
     python datetime object
 
     '''
-    return datetime.datetime.strptime(string, '%d-%b-%Y %H:%M:%S')
+    return datetime.datetime.strptime(matDate, '%d-%b-%Y %H:%M:%S')
 
 def split_around_nan(sig):
     '''
@@ -907,31 +957,34 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     # open the hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
 
-    #### get the table
-    ###datatable = data.root.data.datatable
-    #### get the row
-    ###row = datatable.row
+    print "Loading run data."
+    # get the table
+    datatable = data.root.data.datatable
+    # get the row
+    row = datatable.row
     # load the files from the h5 directory
     pathToRunH5 = os.path.join(pathToData, 'h5')
-    ###files = sorted(os.listdir(pathToRunH5))
-###
-    #### fill the rows with data
-    ###for run in files:
-        ###print 'Adding run: %s' % run
-        ###rundata = get_run_data(os.path.join(pathToH5, run))
-        ###for par, val in rundata['par'].items():
-            ###row[par] = val
-        #### only take the first 12000 samples for all runs
-        ###for i, col in enumerate(rundata['NICols']):
-            ###try: # there are no roll pot measurements
-                ###row[col] = size_vector(rundata['NIData'][i], 12000)
-            ###except:
-                ###print "There is no %s measurement" % col
-        ###for i, col in enumerate(rundata['VNavCols']):
-            ###row[col] = size_vector(rundata['VNavData'][i], 12000)
-        ###row.append()
-    ###datatable.flush()
+    files = sorted(os.listdir(pathToRunH5))
 
+    # fill the rows with data
+    for run in files:
+        print 'Adding run: %s' % run
+        rundata = get_run_data(os.path.join(pathToRunH5, run))
+        for par, val in rundata['par'].items():
+            row[par] = val
+        # only take the first 12000 samples for all runs
+        for i, col in enumerate(rundata['NICols']):
+            try: # there are no roll pot measurements
+                row[col] = size_vector(rundata['NIData'][i], 12000)
+            except:
+                print "There is no %s measurement" % col
+        for i, col in enumerate(rundata['VNavCols']):
+            row[col] = size_vector(rundata['VNavData'][i], 12000)
+        row.append()
+    datatable.flush()
+
+
+    print "Loading signal data."
     # fill in the signal table
     signaltable = data.root.data.signaltable
     row = signaltable.row
@@ -978,6 +1031,7 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
 
     signaltable.flush()
 
+    print "Loading calibration data."
     # fill in the calibration table
     calibrationtable = data.root.data.calibrationtable
     row = calibrationtable.row
@@ -987,16 +1041,11 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     files = sorted(os.listdir(pathToCalibH5))
 
     for f in files:
-        print f
+        print "Calibration file:", f
         calibDict = get_calib_data(os.path.join(pathToCalibH5, f))
         for k, v in calibDict.items():
-            print k, v
-            if k == 'x' or k == 'v':
-                desiredShape = (30, 400)
-                row[k] = size_array(v, desiredShape)
-            elif k == 'y':
-                desiredShape = 30
-                row[k] = size_array(v, desiredShape)
+            if k in ['x', 'y', 'v']:
+                row[k] = size_vector(v, 50)
             else:
                 row[k] = v
         row.append()
@@ -1004,6 +1053,8 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     calibrationtable.flush()
 
     data.close()
+
+    print datafile, "ready for action!"
 
 def get_two_runs(pathToH5):
     '''Gets the data from both a filtered and unfiltered run.'''
@@ -1081,23 +1132,23 @@ def create_calibration_table_class():
 
     class CalibrationTable(tab.IsDescription):
         accuracy = tab.StringCol(10)
-        bias = tab.Float32Col()
+        bias = tab.Float32Col(dflt=np.nan)
         calibrationID = tab.StringCol(5)
-        calibrationSupplyVoltage = tab.Float32Col()
+        calibrationSupplyVoltage = tab.Float32Col(dflt=np.nan)
         name = tab.StringCol(20)
         notes = tab.StringCol(500)
-        offset = tab.Float32Col()
-        runSupplyVoltage = tab.Float32Col()
+        offset = tab.Float32Col(dflt=np.nan)
+        runSupplyVoltage = tab.Float32Col(dflt=np.nan)
         runSupplyVoltageSource = tab.StringCol(10)
-        rsq = tab.Float32Col()
+        rsq = tab.Float32Col(dflt=np.nan)
         sensorType = tab.StringCol(20)
         signals = tab.StringCol(20, shape=(3,))
-        slope = tab.Float32Col()
+        slope = tab.Float32Col(dflt=np.nan)
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
-        v = tab.Float32Col(shape=(30, 400))
-        x = tab.Float32Col(shape=(30, 400))
-        y = tab.Float32Col(shape=(30,))
+        v = tab.Float32Col(shape=(50,))
+        x = tab.Float32Col(shape=(50,))
+        y = tab.Float32Col(shape=(50,))
 
     return CalibrationTable
 
@@ -1415,7 +1466,10 @@ def get_calib_data(pathToFile):
             calibData[thing.name] = thing.read()[0]
         else:
             if thing.name in ['x', 'v']:
-                calibData[thing.name] = np.mean(thing.read(), 1)
+                try:
+                    calibData[thing.name] = np.mean(thing.read(), 1)
+                except ValueError:
+                    calibData[thing.name] = thing.read()
             else:
                 calibData[thing.name] = thing.read()
 
