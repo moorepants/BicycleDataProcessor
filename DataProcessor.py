@@ -15,45 +15,20 @@ import matplotlib.pyplot as plt
 
 class Signal():
     '''A class for collecting the data for a single signal in a run.'''
-    def __init__(self, runid, name, database):
+    def __init__(self, data):
 
-        # get the tables
-        dTab = database.root.data.datatable
-        sTab = database.root.data.signaltable
-        cTab = database.root.data.calibrationtable
-
-        # get the row number for this particular run id
-        rownum = get_row_num(runid, dTab)
-
-        self.runid = runid
-        self.name = name
-        self.units = [row['units']
-                      for row in sTab.where('signal == name')][0]
-        self.source = [row['source']
-                       for row in sTab.where('signal == name')][0]
-
-        try:
-            self.sensor = Sensor(self.name)
-        except KeyError:
-            print "Bad sensor name"
-
-        self.timeSeries = get_cell(dTab, name, rownum)
-
-        self.numberOfSamples = len(self.timeSeries)
-
-        if self.source == 'NI':
-            sampRateCol = 'NISampleRate'
-        elif self.source == 'VN':
-            sampRateCol = 'VNavSampleRate'
-        else:
-            raise ValueError('{0} is not a valid source.'.format(self.source))
-
-        self.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+        self.runid = data['runid']
+        self.name = data['name']
+        self.units = data['units']
+        self.source = data['source']
+        self.sampleRate = data['sampleRate']
+        self.signal = data['signal']
+        self.numberOfSamples = len(self.signal)
 
     def plot(self):
         '''Plots and returns the time series versus time.'''
         time = time_vector(self.numberOfSamples, self.sampleRate)
-        line = plt.plot(time, self.timeSeries)
+        line = plt.plot(time, self.signal)
         plt.xlabel('Time [s]')
         plt.ylabel(self.units)
         plt.title('{0} signal during run {1}'.format(self.name,
@@ -69,10 +44,158 @@ class Signal():
         '''Returns the filtered signal.'''
         raise NotImplementedError('This is a place holder.')
 
+class RawSignal(Signal):
+    '''A class for collecting the data for a single raw signal in a run.'''
+    def __init__(self, runid, signalName, database):
+
+        # get the tables
+        print "Loading databases"
+        dTab = database.root.data.datatable
+        sTab = database.root.data.signaltable
+        cTab = database.root.data.calibrationtable
+
+        # get the row number for this particular run id
+        print "Get row number"
+        rownum = get_row_num(runid, dTab)
+
+        self.runid = runid
+        print "get time stamp"
+        self.timeStamp = matlab_date_to_object(get_cell(dTab, 'DateTime',
+            rownum))
+        print "get data from signal table"
+        self.calibrationType, self.units, self.source = [(row['calibration'],
+            row['units'], row['source'])
+            for row in sTab.where('signal == signalName')][0]
+        print 'done'
+        self.name = signalName
+
+        # this assumes that the supply voltage for this signal is the same for
+        # all sensor calibrations
+        try:
+            supplySource = [row['runSupplyVoltageSource']
+                           for row in cTab.where('name == signalName')][0]
+            if supplySource == 'na':
+                self.supply = [row['runSupplyVoltage']
+                               for row in cTab.where('name == signalName')][0]
+            else:
+                self.supply = get_cell(dTab, supplySource, rownum)
+        except IndexError:
+            print "This signals does not have a supply voltage."
+
+        try:
+            self.sensor = Sensor(self.name, cTab)
+        except KeyError:
+            print "There is no sensor with this name."
+
+        self.signal = get_cell(dTab, signalName, rownum)
+
+        self.numberOfSamples = len(self.signal)
+
+        if self.source == 'NI':
+            sampRateCol = 'NISampleRate'
+        elif self.source == 'VN':
+            sampRateCol = 'VNavSampleRate'
+        else:
+            raise ValueError('{0} is not a valid source.'.format(self.source))
+
+        self.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+
+    def scale(self):
+        '''Returns the scaled signal based on the calibration data for the
+        supplied date.
+
+        Returns
+        -------
+        : ndarray (n,)
+            Scaled signal.
+
+        '''
+        # pick the largest calibration date without surpassing the run date
+        runDate = self.timeStamp
+        # make a list of calibration ids and time stamps
+        dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
+                       for k, v in self.sensor.data.iteritems()]
+        # sort the pairs with the most recent date first
+        dateIdPairs.sort(key=lambda x: x[1], reverse=True)
+        # go through the list and return the index at which the calibration
+        # date is larger than the run date
+        for i, pair in enumerate(dateIdPairs):
+            if pair[1] > runDate:
+                break
+        calibData = self.sensor.data[dateIdPairs[i][0]]
+
+        slope = calibData['slope']
+        bias = calibData['bias']
+        intercept = calibData['offset']
+        calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
+
+        if self.calibrationType == 'interceptStar':
+            calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                slope * self.signal + intercept)
+        elif self.calibrationType == 'intercept':
+            calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                (slope * self.signal + intercept))
+        elif self.calibrationType == 'bias':
+            calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                slope * (self.signal - bias))
+        elif self.calibrationType == 'matrix':
+            calibratedSignal = self.signal
+        elif self.calibrationType == 'none':
+            calibratedSignal = self.signal
+        else:
+            raise StandardError("None of the calibration equations worked.")
+
+        return calibData['signal'], calibratedSignal, calibData['units']
+
+    def plot_scaled(self):
+        '''Plots and returns the time series versus time.'''
+        time = time_vector(self.numberOfSamples, self.sampleRate)
+        scaled = self.scale()
+        line = plt.plot(time, scaled[1])
+        plt.xlabel('Time [s]')
+        plt.ylabel(scaled[2])
+        plt.title('{0} signal during run {1}'.format(scaled[0],
+                  str(self.runid)))
+        plt.show()
+        return line
+
+class Sensor():
+    '''This class is a container for calibration data for a sensor.'''
+
+    def __init__(self, name, calibrationTable):
+        '''Initializes this sensor class.
+
+        Parameters
+        ----------
+        name : string
+            The CamelCase name of the sensor (e.g. SteerTorqueSensor).
+        calibrationTable : pyTables table object
+            This is the calibration data table that contains all the data taken
+            during calibrations.
+
+        '''
+        self.name = name
+        self.store_calibration_data(calibrationTable)
+
+    def store_calibration_data(self, calibrationTable):
+        '''Stores a dictionary of calibration data for the sensor for all
+        calibration dates.'''
+
+        self.data = {}
+
+        for row in calibrationTable.iterrows():
+            if self.name == row['name']:
+                self.data[row['calibrationID']] = {}
+                for col in calibrationTable.colnames:
+                    self.data[row['calibrationID']][col] = row[col]
+        if self.data == {}:
+            raise KeyError(('{0} is not a valid sensor ' +
+                           'name').format(self.name))
+
 class Run():
     '''The fundamental class for a run.'''
 
-    def __init__(self, runid, datafile, forceRecalc=False):
+    def __init__(self, runid, database, forceRecalc=False):
         '''Loads all parameters if available otherwise it generates them.
 
         Parameters
@@ -80,7 +203,7 @@ class Run():
         runid : int or string
             The run id should be an integer, e.g. 5, or a five digit string with
             leading zeros, e.g. '00005'.
-        datafile : pytable object of an hdf5 file
+        database : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
         forceRecalc : boolean
@@ -90,33 +213,48 @@ class Run():
         '''
 
         # get the tables
-        dataTable = datafile.root.data.datatable
-        signalTable = datafile.root.data.signaltable
+        dataTable = database.root.data.datatable
+        signalTable = database.root.data.signaltable
 
         # get the row number for this particular run id
         rownum = get_row_num(runid, dataTable)
 
         # make some dictionaries to store all the data
-        self.data = {}
-        self.rawDataSignals = {}
+        self.metadata = {}
+        self.rawSignals = {}
+        self.calibratedSignals = {}
+        self.truncatedSignals = {}
+        self.computedSignals ={}
+
+        rawDataCols = [x['signal'] for x in signalTable.where("isRaw == True")]
+        computedCols = [x['signal'] for x in signalTable.iterrows()
+                         if x['isRaw'] == False]
 
         # store the current data for this run
         for col in dataTable.colnames:
-            self.data[col] = get_cell(dataTable, col, rownum)
+            if col not in (rawDataCols + computedCols):
+                self.metadata[col] = get_cell(dataTable, col, rownum)
+
+        for col in rawDataCols:
+            self.rawSignals[col] = RawSignal(runid, col, database)
 
         # tell the user about the run
         self.print_run_info()
 
         if forceRecalc == True:
-            # calculate tau for this run
-            self.data['tau'] = find_timeshift(self.data['FrameAccelY'],
-                                              self.data['AccelerationZ'],
-                                              self.data['NISampleRate'],
-                                              self.data['ThreeVolts'],
-                                              self.data['Speed'])
+            # calibrate the signals for the run
+            for v in self.rawSignals.values():
+                self.calibratedSignals[v.sensor.signal] = v.scale()
 
-            # truncate all the raw data signals
-            self.truncate_signals(signalTable)
+            #### calculate tau for this run
+            ###self.data['tau'] = find_timeshift(-self.data['FrameAccelY'],
+                                              ###self.data['AccelerationZ'],
+                                              ###self.data['NISampleRate'],
+                                              ###self.data['ThreeVolts'],
+                                              ###self.data['Speed'])
+###
+            #### truncate all the raw data signals
+            ###self.truncate_signals(signalTable)
 
             ###cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
                     ###'CalibData', 'calibdata.h5'))
@@ -139,6 +277,9 @@ class Run():
                     ###voltage = self.data[calibSources[calibOutputs.index(col)] + '-Truncated']
                     ###scaled = linear_calib(voltage, cdat[col])
                     ###self.data[col] = scaled
+        else:
+            for col in computedCols:
+                self.computedSignals[col] = RawSignal(runid, col, datafile)
 
     def truncate_signals(self, signalTable):
         '''Truncates and shifts the listed data signals based on the currently stored
@@ -214,104 +355,16 @@ class Run():
     def print_run_info(self):
         '''Prints basic run information to the screen.'''
 
-        print "-" * 79
-        print 'Loading run #', self.data['RunID']
-        print "Environment:", self.data['Environment']
-        print "Rider:", self.data['Rider']
-        print "Bicycle:", self.data['Bicycle']
-        print "Speed:", self.data['Speed']
-        print "Maneuver:", self.data['Maneuver']
-        print "Notes:", self.data['Notes']
-        print "-" * 79
+        print "=" * 79
+        print 'Loading run #', self.metadata['RunID']
+        print "Environment:", self.metadata['Environment']
+        print "Rider:", self.metadata['Rider']
+        print "Bicycle:", self.metadata['Bicycle']
+        print "Speed:", self.metadata['Speed']
+        print "Maneuver:", self.metadata['Maneuver']
+        print "Notes:", self.metadata['Notes']
+        print "=" * 79
 
-class Sensor():
-    '''This class handles coverting the sensor raw data signals to signals in
-    meaningful units.'''
-
-    def __init__(self, name, datafile='InstrumentedBicycleData.h5'):
-        '''Initializes this sensor class.
-
-        Parameters
-        ----------
-        name : string
-            The CamelCase name of the sensor (e.g. SteerTorqueSensor).
-
-        '''
-        self.name = name
-        self.store_calibration_data(datafile)
-
-    def store_calibration_data(self, datafile):
-        '''Returns a dictionary of calibration data for the sensor.'''
-
-        dataFile = tab.openFile(datafile)
-
-        calibTable = dataFile.root.data.calibrationtable
-
-        self.data = {}
-
-        for row in calibTable.iterrows():
-            if self.name == row['name']:
-                self.data[row['calibrationID']] = {}
-                for col in calibTable.colnames:
-                    self.data[row['calibrationID']][col] = row[col]
-        if self.data == {}:
-            raise KeyError(('{0} is not a valid sensor ' +
-                           'name').format(self.name))
-
-        dataFile.close()
-
-    def scale(self, runData):
-        '''Returns the scaled signal based on the calibration data for the
-        supplied date.
-
-        Parameters
-        ----------
-        signal : ndarray, shape (n,)
-            The output signal from the sensor.
-        date : string
-            Matlab date string (e.g. '21-Mar-2011 14:45:54').
-        supply : ndarray, shape(n,), optional
-            The supply voltage to the sensor.
-
-        Returns
-        -------
-        : ndarray (n,)
-            Scaled signal.
-
-        '''
-        # pick the largest calibration date without surpassing the run date
-        runDate = matlab_date_to_object(runData['DateTime'])
-        dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
-                       for k, v in self.data.iteritems()]
-        dateIdPairs.sort(key=lambda x: x[1], reverse=True)
-        calibDate = dateIdPairs[0][1]
-        while calibDate > runDate:
-            calibDate = dateIdPairs.pop[0][1]
-        calibData = self.data[dataIdPairs[0][0]]
-
-        sensorSignal = runData[self.name]
-        slope = calibData['slope']
-        bias = calibData['bias']
-        intercept = calibData['offset']
-        calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
-        try:
-            runSupplyVoltage = runData[calibData['runSupplyVoltageSource']]
-        except KeyError:
-            runSupplyVoltage = calibData['runSupplyVoltage']
-
-        if calibData['sensorType'] == 'potentiometer':
-            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
-                                slope * sensorSignal + intercept)
-        elif np.isnan(bias):
-            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
-                                (slope * sensorSignal + intercept))
-        elif not np.isnan(bias):
-            calibratedSignal = (calibrationSupplyVoltage / runSupplyVoltage *
-                                slope * (sensorSignal - bias))
-        else:
-            raise StandardError("None of the calibration equations worked.")
-
-        return calibratedSignal
 
 def matlab_date_to_object(matDate):
     '''Returns a date time object based on a Matlab datestr() output.
@@ -1053,7 +1106,7 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
                      'RearWheelRate',
                      'RollAngle',
                      'RollRate',
-                     'Speed',
+                     'ForwardSpeed',
                      'SteerAngle',
                      'SteerRate',
                      'SteerTorque',
@@ -1271,7 +1324,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
                          'RearWheelRate',
                          'RollAngle',
                          'RollRate',
-                         'Speed',
+                         'ForwardSpeed',
                          'SteerAngle',
                          'SteerRate',
                          'SteerTorque',
