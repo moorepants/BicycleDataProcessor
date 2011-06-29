@@ -49,24 +49,19 @@ class RawSignal(Signal):
     def __init__(self, runid, signalName, database):
 
         # get the tables
-        print "Loading databases"
         dTab = database.root.data.datatable
         sTab = database.root.data.signaltable
         cTab = database.root.data.calibrationtable
 
         # get the row number for this particular run id
-        print "Get row number"
         rownum = get_row_num(runid, dTab)
 
         self.runid = runid
-        print "get time stamp"
         self.timeStamp = matlab_date_to_object(get_cell(dTab, 'DateTime',
             rownum))
-        print "get data from signal table"
         self.calibrationType, self.units, self.source = [(row['calibration'],
             row['units'], row['source'])
             for row in sTab.where('signal == signalName')][0]
-        print 'done'
         self.name = signalName
 
         # this assumes that the supply voltage for this signal is the same for
@@ -80,12 +75,13 @@ class RawSignal(Signal):
             else:
                 self.supply = get_cell(dTab, supplySource, rownum)
         except IndexError:
-            print "This signals does not have a supply voltage."
+            print "{0} does not have a supply voltage.".format(signalName)
 
         try:
             self.sensor = Sensor(self.name, cTab)
         except KeyError:
-            print "There is no sensor with this name."
+            print "There is no sensor named {0}.".format(signalName)
+            print "-" * 79
 
         self.signal = get_cell(dTab, signalName, rownum)
 
@@ -226,9 +222,11 @@ class Run():
         self.truncatedSignals = {}
         self.computedSignals ={}
 
-        rawDataCols = [x['signal'] for x in signalTable.where("isRaw == True")]
-        computedCols = [x['signal'] for x in signalTable.iterrows()
-                         if x['isRaw'] == False]
+        # make lists of the input and output signals
+        rawDataCols = [x['signal'] for x in
+                       signalTable.where("isRaw == True")]
+        computedCols = [x['signal'] for x in
+                        signalTable.where("isRaw == False")]
 
         # store the current data for this run
         for col in dataTable.colnames:
@@ -239,12 +237,13 @@ class Run():
             self.rawSignals[col] = RawSignal(runid, col, database)
 
         # tell the user about the run
-        self.print_run_info()
+        print self
 
         if forceRecalc == True:
             # calibrate the signals for the run
-            for v in self.rawSignals.values():
-                self.calibratedSignals[v.sensor.signal] = v.scale()
+            for sig in self.rawSignals.values():
+                scaledName, scaledSignal, scaledUnits = sig.scale()
+                self.calibratedSignals[scaledName] = scaledSignal
 
             #### calculate tau for this run
             ###self.data['tau'] = find_timeshift(-self.data['FrameAccelY'],
@@ -352,18 +351,26 @@ class Run():
         else:
             print "No video for this run"
 
-    def print_run_info(self):
+    def __str__(self):
         '''Prints basic run information to the screen.'''
 
-        print "=" * 79
-        print 'Loading run #', self.metadata['RunID']
-        print "Environment:", self.metadata['Environment']
-        print "Rider:", self.metadata['Rider']
-        print "Bicycle:", self.metadata['Bicycle']
-        print "Speed:", self.metadata['Speed']
-        print "Maneuver:", self.metadata['Maneuver']
-        print "Notes:", self.metadata['Notes']
-        print "=" * 79
+        line = "=" * 79
+        info = '''Run # {0}
+Environment: {1}
+Rider: {2}
+Bicycle: {3}
+Speed: {4}
+Maneuver: {5}
+Notes: {6}'''.format(
+        self.metadata['RunID'],
+        self.metadata['Environment'],
+        self.metadata['Rider'],
+        self.metadata['Bicycle'],
+        self.metadata['Speed'],
+        self.metadata['Maneuver'],
+        self.metadata['Notes'])
+
+        return line + '\n' + info + '\n' + line
 
 
 def matlab_date_to_object(matDate):
