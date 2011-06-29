@@ -64,6 +64,11 @@ class RawSignal(Signal):
             for row in sTab.where('signal == signalName')][0]
         self.name = signalName
 
+        try:
+            self.sensor = Sensor(self.name, cTab)
+        except KeyError:
+            print "There is no sensor named {0}.".format(signalName)
+
         # this assumes that the supply voltage for this signal is the same for
         # all sensor calibrations
         try:
@@ -76,17 +81,13 @@ class RawSignal(Signal):
                 self.supply = get_cell(dTab, supplySource, rownum)
         except IndexError:
             print "{0} does not have a supply voltage.".format(signalName)
-
-        try:
-            self.sensor = Sensor(self.name, cTab)
-        except KeyError:
-            print "There is no sensor named {0}.".format(signalName)
             print "-" * 79
 
         self.signal = get_cell(dTab, signalName, rownum)
 
         self.numberOfSamples = len(self.signal)
 
+        # get the appropriate sample rate
         if self.source == 'NI':
             sampRateCol = 'NISampleRate'
         elif self.source == 'VN':
@@ -106,42 +107,47 @@ class RawSignal(Signal):
             Scaled signal.
 
         '''
-        # pick the largest calibration date without surpassing the run date
-        runDate = self.timeStamp
-        # make a list of calibration ids and time stamps
-        dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
-                       for k, v in self.sensor.data.iteritems()]
-        # sort the pairs with the most recent date first
-        dateIdPairs.sort(key=lambda x: x[1], reverse=True)
-        # go through the list and return the index at which the calibration
-        # date is larger than the run date
-        for i, pair in enumerate(dateIdPairs):
-            if pair[1] > runDate:
-                break
-        calibData = self.sensor.data[dateIdPairs[i][0]]
-
-        slope = calibData['slope']
-        bias = calibData['bias']
-        intercept = calibData['offset']
-        calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
-
-        if self.calibrationType == 'interceptStar':
-            calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                slope * self.signal + intercept)
-        elif self.calibrationType == 'intercept':
-            calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                (slope * self.signal + intercept))
-        elif self.calibrationType == 'bias':
-            calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                slope * (self.signal - bias))
-        elif self.calibrationType == 'matrix':
-            calibratedSignal = self.signal
-        elif self.calibrationType == 'none':
-            calibratedSignal = self.signal
+        # these will need to be changed once we start measuring them
+        doNotScale = ['LeanPotentiometer',
+                      'HipPotentiometer',
+                      'TwistPotentiometer']
+        if self.calibrationType in ['none', 'matrix'] or self.name in doNotScale:
+            print "Not scaling {0}".format(self.name)
+            return self.name, self.signal, self.units
         else:
-            raise StandardError("None of the calibration equations worked.")
+            print "Scaling {0}".format(self.name)
+            # pick the largest calibration date without surpassing the run date
+            runDate = self.timeStamp
+            # make a list of calibration ids and time stamps
+            dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
+                           for k, v in self.sensor.data.iteritems()]
+            # sort the pairs with the most recent date first
+            dateIdPairs.sort(key=lambda x: x[1], reverse=True)
+            # go through the list and return the index at which the calibration
+            # date is larger than the run date
+            for i, pair in enumerate(dateIdPairs):
+                if pair[1] > runDate:
+                    break
+            calibData = self.sensor.data[dateIdPairs[i][0]]
 
-        return calibData['signal'], calibratedSignal, calibData['units']
+            slope = calibData['slope']
+            bias = calibData['bias']
+            intercept = calibData['offset']
+            calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
+
+            if self.calibrationType == 'interceptStar':
+                calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                    slope * self.signal + intercept)
+            elif self.calibrationType == 'intercept':
+                calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                    (slope * self.signal + intercept))
+            elif self.calibrationType == 'bias':
+                calibratedSignal = (calibrationSupplyVoltage / self.supply *
+                                    slope * (self.signal - bias))
+            else:
+                raise StandardError("None of the calibration equations worked.")
+
+            return calibData['signal'], calibratedSignal, calibData['units']
 
     def plot_scaled(self):
         '''Plots and returns the time series versus time.'''
