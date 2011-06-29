@@ -704,9 +704,14 @@ def get_row_num(runid, table):
         The row number for runid.
 
     '''
-    rownum = [x.nrow for x in table.iterrows()
-              if x['RunID'] == int(runid)]
-    return rownum[0]
+    # the row number should be the same as the run id but there is a
+    # possibility that it isn't
+    rownum = table[int(runid)]['RunID']
+    if rownum != int(runid):
+        rownum = [x.nrow for x in table.iterrows()
+                  if x['RunID'] == int(runid)][0]
+        print "The row numbers in the database do not match the run ids!"
+    return rownum
 
 def sync_error(tau, signal1, signal2, time):
     '''Returns the error between two signal time histories.
