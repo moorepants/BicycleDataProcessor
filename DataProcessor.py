@@ -40,9 +40,26 @@ class Signal():
         '''Returns the frequency content of the signal.'''
         raise NotImplementedError('This is a place holder.')
 
-    def filter(self):
-        '''Returns the filtered signal.'''
-        raise NotImplementedError('This is a place holder.')
+    def filter(self, frequency):
+        '''Returns the low pass Butterworth filtered signal at the specifited
+        frequency.'''
+        return butterworth(self.signal, frequency, self.sampleRate)
+
+    def truncate(self, tau):
+        '''Returns the shifted and truncated signal based on the provided
+        timeshift, tau.'''
+        return truncate_data(self.signal, self.source, self.sampleRate, tau)
+
+    def as_dictionary(self):
+        '''Returns the signal data as a dictionary.'''
+        data = {'runid': self.runid,
+                'name': self.name,
+                'units': self.units,
+                'source': self.source,
+                'sampleRate': self.sampleRate,
+                'signal': self.signal,
+                'numberOfSamples': self.numberOfSamples}
+        return data
 
 class RawSignal(Signal):
     '''A class for collecting the data for a single raw signal in a run.'''
@@ -249,61 +266,32 @@ class Run():
             # calibrate the signals for the run
             for sig in self.rawSignals.values():
                 scaledName, scaledSignal, scaledUnits = sig.scale()
-                self.calibratedSignals[scaledName] = scaledSignal
+                scaledData = {'runid': sig.runid,
+                              'name': scaledName,
+                              'units': scaledUnits,
+                              'source': sig.source,
+                              'sampleRate': sig.sampleRate,
+                              'signal': scaledSignal}
 
-            #### calculate tau for this run
-            ###self.data['tau'] = find_timeshift(-self.data['FrameAccelY'],
-                                              ###self.data['AccelerationZ'],
-                                              ###self.data['NISampleRate'],
-                                              ###self.data['ThreeVolts'],
-                                              ###self.data['Speed'])
-###
-            #### truncate all the raw data signals
-            ###self.truncate_signals(signalTable)
+                self.calibratedSignals[scaledName] = Signal(scaledData)
 
-            ###cdat = get_calib_data(os.path.join('..', 'BicycleDAQ', 'data',
-                    ###'CalibData', 'calibdata.h5'))
+            # calculate tau for this run
+            self.tau = find_timeshift(
+                self.calibratedSignals['AccelerometerAccelerationY'].signal,
+                self.calibratedSignals['AccelerationZ'].signal,
+                self.metadata['NISampleRate'],
+                self.metadata['Speed'])
 
-            #### these are the columns that need to be calculated
-            ###processedCols = [x['signal'] for x in signalTable.iterrows()
-                             ###if x['isRaw'] == False]
-###
-            ###pairs = [(k, v['signal']) for k, v in cdat.items()]
-            ###calibSources = [x[1] for x in pairs]
-            ###print calibSources
-            ###calibOutputs = [x[0] for x in pairs]
-            ###print calibOutputs
-###
-            ###for i, col in enumerate(processedCols):
-                ###if col == 'tau':
-                    ###pass
-                ###elif col in calibOutputs:
-                    ###print 'Processing', col
-                    ###voltage = self.data[calibSources[calibOutputs.index(col)] + '-Truncated']
-                    ###scaled = linear_calib(voltage, cdat[col])
-                    ###self.data[col] = scaled
+            # truncate all the raw data signals
+            for name, sig in self.calibratedSignals.items():
+                trData = sig.as_dictionary()
+                trData['signal'] = sig.truncate(self.tau)
+                self.truncatedSignals[name] = Signal(trData)
+
+            # compute the final output signals
         else:
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
-
-    def truncate_signals(self, signalTable):
-        '''Truncates and shifts the listed data signals based on the currently stored
-        value of tau.
-
-        Parameters
-        ----------
-        signalTable : pytables table
-
-        '''
-        for source in ['VN', 'NI']:
-            signalNames = [x['signal'] for x in signalTable.iterrows()
-                           if x['source'] == source]
-
-            for rawSig in signalNames:
-                self.data[rawSig + '-Truncated'] = truncate_data(
-                    self.data[rawSig], source,
-                    self.data['NISampleRate'],
-                    self.data['tau'])
 
     def plot(self, *args):
         '''
@@ -809,22 +797,20 @@ def normalize(sig):
     '''
     return sig / np.nanmax(sig)
 
-def find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed):
+def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     '''Returns the timeshift, tau, of the VectorNav [VN] data relative to the
     National Instruments [NI] data.
 
     Parameters
     ----------
     NIacc : ndarray, shape(n, )
-        The (mostly) vertical acceleration voltage signal from the NI box. 
+        The acceleration of the NI accelerometer in its local Y direction. 
     VNacc : ndarray, shape(n, )
-        The (mostly) vertical acceleration from the VectorNav. Should be the
+        The acceleration of the VN-100 in its local Z direction. Should be the
         same length as NIacc and contains the same signal albiet time shifted.
         The VectorNav signal should be leading the NI signal.
     sampleRate : integer
         Sample rate of the signals. This should be the same for each signal.
-    threeVolts : ndarray, shape(n, )
-        The NI signal from the three volt source.
     speed : float
         The approximate forward speed of the bicycle.
 
@@ -843,7 +829,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, threeVolts, speed):
     time = time_vector(N, sampleRate)
 
     # scale the NI signal from volts to m/s**2, and switch the sign
-    niSig = -(niAcc - threeVolts / 2.) / (300. / 1000.) * 9.81
+    niSig = -niAcc
     vnSig = vnAcc
 
     # some constants for find_bump
@@ -1284,7 +1270,7 @@ def create_calibration_table_class():
         runSupplyVoltageSource = tab.StringCol(10)
         rsq = tab.Float32Col(dflt=np.nan)
         sensorType = tab.StringCol(20)
-        signal = tab.StringCol(20)
+        signal = tab.StringCol(26)
         slope = tab.Float32Col(dflt=np.nan)
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
