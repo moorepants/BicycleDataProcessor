@@ -19,7 +19,7 @@ from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 from bicycleparameters import bicycleparameters as bp
 
-class Signal():
+class Signal(np.ndarray):
     '''A class for collecting the data for a single signal in a run.'''
 
     # define some basic unit converions
@@ -30,56 +30,60 @@ class Signal():
                    'feet/second->meter/second': 12. * 2.54 / 100.,
                    'mile/hour->meter/second': 0.00254 * 12 / 5280. / 3600.}
 
-    def __init__(self, data):
+    def __new__(cls, input_array, metadata=None):
+        # cast the input array into my subclass of ndarray
+        obj = np.asarray(input_array).view(cls)
+        #
+        obj.metadata = metadata
+        return obj
 
-        self.runid = data['runid']
-        self.name = data['name']
-        self.units = data['units']
-        self.source = data['source']
-        self.sampleRate = data['sampleRate']
-        self.signal = data['signal']
-        self.numberOfSamples = len(self.signal)
+    def __array__finalize__(self, obj):
+        if obj is None: return
+        self.metadata = getattr(obj, 'metadata', None)
 
-    def __add__(self, otherSignal):
-        '''Defines how signals add togther.'''
+    def __array_wrap__(self, output_array, context=None):
+        return np.ndarray.__array_wrap__(self, output_array, context)
 
-        if self.units != otherSignal.units:
-            raise ValueError('Cannot add signals of differing units.')
-        elif self.sampleRate != otherSignal.sampleRate:
-            raise ValueError('Cannot add signals with different sample rates.')
-        elif self.numberOfSamples != otherSignal.numberOfSamples:
-            raise ValueError('Cannot add signals with different lengths.')
-        else:
-            newSig = self.signal + otherSignal.signal
-            data = {'runid': self.runid,
-                    'name': None,
-                    'units': self.units,
-                    'source': None,
-                    'sampleRate': self.sampleRate,
-                    'signal': newSig,
-                    'numberOfSamples': len(newSig)}
-            return Signal(data)
-
-    def __mul__(self, otherSignal):
-        '''Returns a new signal.'''
-        if self.sampleRate != otherSignal.sampleRate:
-            raise ValueError('Cannot multiply signals with different sample rates.')
-        elif self.numberOfSamples != otherSignal.numberOfSamples:
-            raise ValueError('Cannot add signals with different lengths.')
-        else:
-            newSig = self.signal * otherSignal.signal
-            if self.units == otherSignal.units:
-                newUnits = self.units + '**2'
-            else:
-                newUnits = self.units + '*' + otherSignal.units
-            data = {'runid': self.runid,
-                    'name': None,
-                    'units': newUnits,
-                    'source': None,
-                    'sampleRate': self.sampleRate,
-                    'signal': newSig,
-                    'numberOfSamples': len(newSig)}
-            return Signal(data)
+    ###def __add__(self, otherSignal):
+        ###'''Defines how signals add togther.'''
+###
+        ###if self.units != otherSignal.units:
+            ###raise ValueError('Cannot add signals of differing units.')
+        ###elif self.sampleRate != otherSignal.sampleRate:
+            ###raise ValueError('Cannot add signals with different sample rates.')
+        ###elif self.numberOfSamples != otherSignal.numberOfSamples:
+            ###raise ValueError('Cannot add signals with different lengths.')
+        ###else:
+            ###newSig = self.signal + otherSignal.signal
+            ###data = {'runid': self.runid,
+                    ###'name': None,
+                    ###'units': self.units,
+                    ###'source': None,
+                    ###'sampleRate': self.sampleRate,
+                    ###'signal': newSig,
+                    ###'numberOfSamples': len(newSig)}
+            ###return Signal(data)
+###
+    ###def __mul__(self, otherSignal):
+        ###'''Returns a new signal.'''
+        ###if self.sampleRate != otherSignal.sampleRate:
+            ###raise ValueError('Cannot multiply signals with different sample rates.')
+        ###elif self.numberOfSamples != otherSignal.numberOfSamples:
+            ###raise ValueError('Cannot add signals with different lengths.')
+        ###else:
+            ###newSig = self.signal * otherSignal.signal
+            ###if self.units == otherSignal.units:
+                ###newUnits = self.units + '**2'
+            ###else:
+                ###newUnits = self.units + '*' + otherSignal.units
+            ###data = {'runid': self.runid,
+                    ###'name': None,
+                    ###'units': newUnits,
+                    ###'source': None,
+                    ###'sampleRate': self.sampleRate,
+                    ###'signal': newSig,
+                    ###'numberOfSamples': len(newSig)}
+            ###return Signal(data)
 
     def plot(self):
         '''Plots and returns the time series versus time.'''
@@ -103,12 +107,12 @@ class Signal():
     def filter(self, frequency):
         '''Returns the low pass Butterworth filtered signal at the specifited
         frequency.'''
-        return butterworth(self.signal, frequency, self.sampleRate)
+        return butterworth(self, frequency, self.sampleRate)
 
     def truncate(self, tau):
         '''Returns the shifted and truncated signal based on the provided
         timeshift, tau.'''
-        return truncate_data(self.signal, self.source, self.sampleRate, tau)
+        return truncate_data(self, self.source, self.sampleRate, tau)
 
     def as_dictionary(self):
         '''Returns the signal data as a dictionary.'''
@@ -117,28 +121,25 @@ class Signal():
                 'units': self.units,
                 'source': self.source,
                 'sampleRate': self.sampleRate,
-                'signal': self.signal,
                 'numberOfSamples': self.numberOfSamples}
         return data
 
-    def convert(self, units):
+    def convert_units(self, units):
         '''Returns a signal with different units and proper scaling.'''
-        conversion = self.units + '->' + units
         try:
-            newSig = self.signal * self.conversions[conversion]
+            conversion = self.units + '->' + units
+            newSig = self * self.conversions[conversion]
         except KeyError:
             try:
                 conversion = units + '->' + self.units
-                newSig = self.signal / self.conversions[conversion]
+                newSig = self / self.conversions[conversion]
             except KeyError:
                 raise KeyError(('Conversion from {0} to {1} is not ' +
                                'defined.').format(self.units, units))
         # make the new signal
-        newSignalInstance = copy.copy(self)
-        newSignalInstance.units = units
-        newSignalInstance.signal = newSig
+        self.units = units
 
-        return newSignalInstance
+        return newSig
 
 class RawSignal(Signal):
     '''A class for collecting the data for a single raw signal in a run.'''
