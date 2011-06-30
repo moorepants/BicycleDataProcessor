@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
+# built in imports
 import os
 import re
 import datetime
+import copy
 from operator import xor
+from math import pi
 
 # dependencies
 import tables as tab
@@ -18,6 +21,15 @@ from bicycleparameters import bicycleparameters as bp
 
 class Signal():
     '''A class for collecting the data for a single signal in a run.'''
+
+    # define some basic unit converions
+    conversions = {'degree->radian': pi / 180.,
+                   'inch*pound->newton*meter': 25.4 / 1000. * 4.44822162,
+                   'pound->newton': 4.44822162,
+                   'degree/second->radian/second': pi / 180.,
+                   'feet/second->meter/second': 12. * 2.54 / 100.,
+                   'mile/hour->meter/second': 0.00254 * 12 / 5280. / 3600.}
+
     def __init__(self, data):
 
         self.runid = data['runid']
@@ -27,6 +39,47 @@ class Signal():
         self.sampleRate = data['sampleRate']
         self.signal = data['signal']
         self.numberOfSamples = len(self.signal)
+
+    def __add__(self, otherSignal):
+        '''Defines how signals add togther.'''
+
+        if self.units != otherSignal.units:
+            raise ValueError('Cannot add signals of differing units.')
+        elif self.sampleRate != otherSignal.sampleRate:
+            raise ValueError('Cannot add signals with different sample rates.')
+        elif self.numberOfSamples != otherSignal.numberOfSamples:
+            raise ValueError('Cannot add signals with different lengths.')
+        else:
+            newSig = self.signal + otherSignal.signal
+            data = {'runid': self.runid,
+                    'name': None,
+                    'units': self.units,
+                    'source': None,
+                    'sampleRate': self.sampleRate,
+                    'signal': newSig,
+                    'numberOfSamples': len(newSig)}
+            return Signal(data)
+
+    def __mul__(self, otherSignal):
+        '''Returns a new signal.'''
+        if self.sampleRate != otherSignal.sampleRate:
+            raise ValueError('Cannot multiply signals with different sample rates.')
+        elif self.numberOfSamples != otherSignal.numberOfSamples:
+            raise ValueError('Cannot add signals with different lengths.')
+        else:
+            newSig = self.signal * otherSignal.signal
+            if self.units == otherSignal.units:
+                newUnits = self.units + '**2'
+            else:
+                newUnits = self.units + '*' + otherSignal.units
+            data = {'runid': self.runid,
+                    'name': None,
+                    'units': newUnits,
+                    'source': None,
+                    'sampleRate': self.sampleRate,
+                    'signal': newSig,
+                    'numberOfSamples': len(newSig)}
+            return Signal(data)
 
     def plot(self):
         '''Plots and returns the time series versus time.'''
@@ -67,6 +120,25 @@ class Signal():
                 'signal': self.signal,
                 'numberOfSamples': self.numberOfSamples}
         return data
+
+    def convert(self, units):
+        '''Returns a signal with different units and proper scaling.'''
+        conversion = self.units + '->' + units
+        try:
+            newSig = self.signal * self.conversions[conversion]
+        except KeyError:
+            try:
+                conversion = units + '->' + self.units
+                newSig = self.signal / self.conversions[conversion]
+            except KeyError:
+                raise KeyError(('Conversion from {0} to {1} is not ' +
+                               'defined.').format(self.units, units))
+        # make the new signal
+        newSignalInstance = copy.copy(self)
+        newSignalInstance.units = units
+        newSignalInstance.signal = newSig
+
+        return newSignalInstance
 
 class RawSignal(Signal):
     '''A class for collecting the data for a single raw signal in a run.'''
@@ -300,9 +372,27 @@ class Run():
                 self.truncatedSignals[name] = Signal(trData)
 
             # compute the final output signals
+            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce'].signal
+            self.computedSignals['RearWheelRate'] = self.truncatedSignals['RearWheelRate'].signal
+            self.computedSignals['RollAngle'] = self.truncatedSignals['RollAngle'].signal
+            self.computedSignals['SteerAngle'] = self.truncatedSignals['SteerAngle'].signal
+            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce'].signal
             self.computedSignals['ForwardSpeed'] = (
                 self.bikeParameters['rR'].nominal_value *
                 self.truncatedSignals['RearWheelRate'].signal)
+            # these are both in degrees
+            self.computedSignals['SteerRate'] = steer_rate(
+                self.truncatedSignals['ForkRate'].signal,
+                self.truncatedSignals['AngularRateZ'].signal)
+            yr, rr, pr = yaw_roll_pitch_rate(
+                    self.truncatedSignals['AngularRateX'].signal,
+                    self.truncatedSignals['AngularRateY'].signal,
+                    self.truncatedSignals['AngularRateZ'].signal,
+                    self.bikeParameters['lam'].nominal_value,
+                    rollAngle=self.truncatedSignals['RollAngle'].signal)
+            self.computedSignals['YawRate'] = yr
+            self.computedSignals['RollRate'] = rr
+            self.computedSignals['PitchRate'] = pr
         else:
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
@@ -321,24 +411,19 @@ class Run():
             and truncated.
 
         '''
-        sampleRate = self.data['NISampleRate']
+        sampleRate = self.metadata['NISampleRate']
 
         for i, arg in enumerate(args):
-            try:
-                time = time_vector(len(self.data[arg + '-Truncated']),
-                                   sampleRate)
-                plt.plot(time, self.data[arg + '-Truncated'])
-            except KeyError:
-                time = time_vector(len(self.data[arg]), sampleRate)
-                plt.plot(time, self.data[arg])
+            time = time_vector(len(self.computedSignals[arg]), sampleRate)
+            plt.plot(time, self.computedSignals[arg])
 
         plt.legend(args)
 
-        plt.title('Rider: ' + self.data['Rider'] +
-                  ', Speed: ' + str(self.data['Speed']) + 'm/s\n' +
-                  'Maneuver: ' + self.data['Maneuver'] +
-                  ', Environment: ' + self.data['Environment'] + '\n' +
-                  'Notes: ' + self.data['Notes'])
+        plt.title('Rider: ' + self.metadata['Rider'] +
+                  ', Speed: ' + str(self.metadata['Speed']) + 'm/s\n' +
+                  'Maneuver: ' + self.metadata['Maneuver'] +
+                  ', Environment: ' + self.metadata['Environment'] + '\n' +
+                  'Notes: ' + self.metadata['Notes'])
         plt.grid()
 
         plt.show()
@@ -613,10 +698,10 @@ def yaw_roll_pitch_rate(angularRateX, angularRateY, angularRateZ,
 
     '''
     yawRate = -(angularRateX*np.sin(lam) -
-                angularRateZ * np.cos(lam)) / np.cos(roll)
+                angularRateZ * np.cos(lam)) / np.cos(rollAngle)
     rollRate = angularRateX * np.cos(lam) + angularRateZ * np.sin(lam)
-    pitchRate = (angularRateY + angularRateX * np.sin(lam) * np.tan(roll) -
-                 angularRateZ * np.cos(lam) * np.tan(roll))
+    pitchRate = (angularRateY + angularRateX * np.sin(lam) * np.tan(rollAngle) -
+                 angularRateZ * np.cos(lam) * np.tan(rollAngle))
 
     return yawRate, rollRate, pitchRate
 
