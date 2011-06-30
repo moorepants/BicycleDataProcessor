@@ -43,6 +43,10 @@ class Signal():
         '''Returns the frequency content of the signal.'''
         raise NotImplementedError('This is a place holder.')
 
+    def derivative(self):
+        '''Returns the derivative of the signal.'''
+        raise NotImplementedError('This is a place holder.')
+
     def filter(self, frequency):
         '''Returns the low pass Butterworth filtered signal at the specifited
         frequency.'''
@@ -578,33 +582,43 @@ def pad_with_zeros(num, digits):
 
     return num
 
-def roll_pitch_yaw_rate(angularRateX, angularRateY, angularRateZ, lam):
-    '''Transforms the measured body fixed rates to global rates by
-    rotating them along the head angle.
+def yaw_roll_pitch_rate(angularRateX, angularRateY, angularRateZ,
+                        lam, rollAngle=0.):
+    '''Returns the bicycle frame yaw, roll and pitch rates based on the body
+    fixed rate data taken with the VN-100 and optionally the roll angle
+    measurement.
 
     Parameters
     ----------
-    angularRateX : ndarray
+    angularRateX : ndarray, shape(n,)
         The body fixed rate perpendicular to the headtube and pointing forward.
-    angularRateY : ndarray
+    angularRateY : ndarray, shape(n,)
         The body fixed rate perpendicular to the headtube and pointing to the
         right of the bicycle.
-    angularRateZ : ndarray
+    angularRateZ : ndarray, shape(n,)
         The body fixed rate aligned with the headtube and pointing downward.
     lam : float
         The steer axis tilt.
+    rollAngle : ndarray, shape(n,), optional
+        The roll angle of the bicycle frame.
 
     Returns
     -------
-    yawRate : ndarray
-        The 
-    , pitchRate, rollRate : array
+    yawRate : ndarray, shape(n,)
+        The yaw rate of the bicycle frame.
+    rollRate : ndarray, shape(n,)
+        The roll rate of the bicycle frame.
+    pitchRate : ndarray, shape(n,)
+        The pitch rate of the bicycle frame.
 
     '''
-    rollrate  =  omega_x*cos(lam) + omega_z*sin(lam)
-    pitchrate =  omega_y
-    yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
-    return yawrate, pitchrate, rollrate
+    yawRate = -(angularRateX*np.sin(lam) -
+                angularRateZ * np.cos(lam)) / np.cos(roll)
+    rollRate = angularRateX * np.cos(lam) + angularRateZ * np.sin(lam)
+    pitchRate = (angularRateY + angularRateX * np.sin(lam) * np.tan(roll) -
+                 angularRateZ * np.cos(lam) * np.tan(roll))
+
+    return yawRate, rollRate, pitchRate
 
 def steer_rate(forkRate, angularRateZ):
     '''Returns the steer rate.'''
