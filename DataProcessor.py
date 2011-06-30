@@ -4,6 +4,8 @@ import os
 import re
 import datetime
 from operator import xor
+
+# dependencies
 import tables as tab
 import numpy as np
 import scipy as sp
@@ -12,6 +14,7 @@ from scipy.optimize import fmin
 from scipy.signal import butter, lfilter
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
+from bicycleparameters import bicycleparameters as bp
 
 class Signal():
     '''A class for collecting the data for a single signal in a run.'''
@@ -262,18 +265,22 @@ class Run():
         # tell the user about the run
         print self
 
+        # load the parameters for the bicycle
+        # this code will not work for other bicycle/rider combinations. it will
+        # need to be updated
+        bicycles = {'Rigid Rider': 'Rigid'}
+        pathToBicycles = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleParameters/data/bicycles'
+        rigid = bp.Bicycle(bicycles[self.metadata['Bicycle']], pathToBicycles=pathToBicycles)
+        pathToRider = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleParameters/data/riders'
+        rigid.add_rider(pathToRider=pathToRider + '/Jason/JasonRigidBenchmark.txt')
+        self.bikeParameters = rigid.parameters['Benchmark']
+
         if forceRecalc == True:
             # calibrate the signals for the run
             for sig in self.rawSignals.values():
-                scaledName, scaledSignal, scaledUnits = sig.scale()
-                scaledData = {'runid': sig.runid,
-                              'name': scaledName,
-                              'units': scaledUnits,
-                              'source': sig.source,
-                              'sampleRate': sig.sampleRate,
-                              'signal': scaledSignal}
-
-                self.calibratedSignals[scaledName] = Signal(scaledData)
+                sD = sig.as_dictionary()
+                sD['name'], sD['signal'], sD['units'] = sig.scale()
+                self.calibratedSignals[sD['name']] = Signal(sD)
 
             # calculate tau for this run
             self.tau = find_timeshift(
@@ -289,6 +296,9 @@ class Run():
                 self.truncatedSignals[name] = Signal(trData)
 
             # compute the final output signals
+            self.computedSignals['ForwardSpeed'] = (
+                self.bikeParameters['rR'].nominal_value *
+                self.truncatedSignals['RearWheelRate'].signal)
         else:
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
@@ -568,59 +578,37 @@ def pad_with_zeros(num, digits):
 
     return num
 
-def linear_calib(V, calibdata):
-    '''
-    Linear tranformation from raw voltage measurements (V) to calibrated
-    data signals (s).
-
-    Parameters
-    ----------
-    V : ndarray, shape(n, )
-        Time series of voltage measurements.
-
-    calibdata : dictionary
-        Calibration data
-
-    Output
-    ----------
-    s : ndarray, shape(n, )
-        Calibrated signal
-
-    '''
-
-    p1 = calibdata['slope']
-    p0 = calibdata['offset']
-    s = p1 * V + p0
-    return s
-
-def roll_pitch_yaw_rate(framerate_x, framerate_y, framerate_z, bikeparms):
+def roll_pitch_yaw_rate(angularRateX, angularRateY, angularRateZ, lam):
     '''Transforms the measured body fixed rates to global rates by
     rotating them along the head angle.
 
     Parameters
     ----------
-    omega_x, omega_y, omega_z : array
-        Body fixed angular velocities
+    angularRateX : ndarray
+        The body fixed rate perpendicular to the headtube and pointing forward.
+    angularRateY : ndarray
+        The body fixed rate perpendicular to the headtube and pointing to the
+        right of the bicycle.
+    angularRateZ : ndarray
+        The body fixed rate aligned with the headtube and pointing downward.
+    lam : float
+        The steer axis tilt.
 
-    bikeparms : Dictionary
-        Bike parameters
-
-    Output
-    ----------
-    yawrate, pitchrate, rollrate : array
-        Calibrated signal
+    Returns
+    -------
+    yawRate : ndarray
+        The 
+    , pitchRate, rollRate : array
 
     '''
-    lam = bikeparms['lambda']
     rollrate  =  omega_x*cos(lam) + omega_z*sin(lam)
     pitchrate =  omega_y
     yawrate   = -omega_x*sin(lam) + omega_z*cos(lam)
     return yawrate, pitchrate, rollrate
 
-def steer_rate(steergyro, framerate_z):
-    lam = bikeparms['lambda']
-    deltad = steergyro + framerate_z
-    return deltad
+def steer_rate(forkRate, angularRateZ):
+    '''Returns the steer rate.'''
+    return forkRate - angularRateZ
 
 def get_cell(datatable, colname, rownum):
     '''
