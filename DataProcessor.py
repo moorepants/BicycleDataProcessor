@@ -118,7 +118,8 @@ class Signal(np.ndarray):
 
 class RawSignal(Signal):
     '''A class for collecting the data for a single raw signal in a run.'''
-    def __init__(self, runid, signalName, database):
+
+    def __new__(cls, runid, signalName, database):
 
         # get the tables
         dTab = database.root.data.datatable
@@ -127,17 +128,21 @@ class RawSignal(Signal):
 
         # get the row number for this particular run id
         rownum = get_row_num(runid, dTab)
+        signal = get_cell(dTab, signalName, rownum)
 
-        self.runid = runid
-        self.timeStamp = matlab_date_to_object(get_cell(dTab, 'DateTime',
+        # cast the input array into my subclass of ndarray
+        obj = np.asarray(signal).view(cls)
+
+        obj.runid = runid
+        obj.timeStamp = matlab_date_to_object(get_cell(dTab, 'DateTime',
             rownum))
-        self.calibrationType, self.units, self.source = [(row['calibration'],
+        obj.calibrationType, obj.units, obj.source = [(row['calibration'],
             row['units'], row['source'])
             for row in sTab.where('signal == signalName')][0]
-        self.name = signalName
+        obj.name = signalName
 
         try:
-            self.sensor = Sensor(self.name, cTab)
+            obj.sensor = Sensor(obj.name, cTab)
         except KeyError:
             print "There is no sensor named {0}.".format(signalName)
 
@@ -147,27 +152,46 @@ class RawSignal(Signal):
             supplySource = [row['runSupplyVoltageSource']
                            for row in cTab.where('name == signalName')][0]
             if supplySource == 'na':
-                self.supply = [row['runSupplyVoltage']
+                obj.supply = [row['runSupplyVoltage']
                                for row in cTab.where('name == signalName')][0]
             else:
-                self.supply = get_cell(dTab, supplySource, rownum)
+                obj.supply = get_cell(dTab, supplySource, rownum)
         except IndexError:
             print "{0} does not have a supply voltage.".format(signalName)
             print "-" * 79
 
-        self.signal = get_cell(dTab, signalName, rownum)
-
-        self.numberOfSamples = len(self.signal)
 
         # get the appropriate sample rate
-        if self.source == 'NI':
+        if obj.source == 'NI':
             sampRateCol = 'NISampleRate'
-        elif self.source == 'VN':
+        elif obj.source == 'VN':
             sampRateCol = 'VNavSampleRate'
         else:
-            raise ValueError('{0} is not a valid source.'.format(self.source))
+            raise ValueError('{0} is not a valid source.'.format(obj.source))
 
-        self.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+        obj.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.calibrationType = getattr(obj, 'calibrationType', None)
+        self.name = getattr(obj, 'name', None)
+        self.runid = getattr(obj, 'runid', None)
+        self.sampleRate = getattr(obj, 'sampleRate', None)
+        self.sensor = getattr(obj, 'sensor', None)
+        self.source = getattr(obj, 'source', None)
+        self.units = getattr(obj, 'units', None)
+        self.timeStamp = getattr(obj, 'timeStamp', None)
+
+    def __array_wrap__(self, outputArray, context=None):
+        # doesn't support these things in basic ufunc calls...maybe one day
+        outputArray.calibrationType = None
+        outputArray.name = None
+        outputArray.sensor = None
+        outputArray.source = None
+        outputArray.units = None
+        return np.ndarray.__array_wrap__(self, outputArray, context)
 
     def scale(self):
         '''Returns the scaled signal based on the calibration data for the
@@ -183,6 +207,11 @@ class RawSignal(Signal):
         doNotScale = ['LeanPotentiometer',
                       'HipPotentiometer',
                       'TwistPotentiometer']
+        try:
+            self.calibrationType
+        except AttributeError:
+            raise AttributeError("Can't scale without the calibration type")
+
         if self.calibrationType in ['none', 'matrix'] or self.name in doNotScale:
             print "Not scaling {0}".format(self.name)
             return self.name, self.signal, self.units
@@ -209,17 +238,19 @@ class RawSignal(Signal):
 
             if self.calibrationType == 'interceptStar':
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                    slope * self.signal + intercept)
+                                    slope * self + intercept)
             elif self.calibrationType == 'intercept':
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                    (slope * self.signal + intercept))
+                                    (slope * self + intercept))
             elif self.calibrationType == 'bias':
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                    slope * (self.signal - bias))
+                                    slope * (self - bias))
             else:
                 raise StandardError("None of the calibration equations worked.")
+            calibratedSignal.name = calibData['signal']
+            calibratedSignal.units = calibData['units']
 
-            return calibData['signal'], calibratedSignal, calibData['units']
+            return calibratedSignal
 
     def plot_scaled(self):
         '''Plots and returns the time series versus time.'''
@@ -1319,23 +1350,23 @@ def create_calibration_table_class():
 
     class CalibrationTable(tab.IsDescription):
         accuracy = tab.StringCol(10)
-        bias = tab.Float32Col(dflt=np.nan)
+        bias = tab.Float64Col(dflt=np.nan)
         calibrationID = tab.StringCol(5)
-        calibrationSupplyVoltage = tab.Float32Col(dflt=np.nan)
+        calibrationSupplyVoltage = tab.Float64Col(dflt=np.nan)
         name = tab.StringCol(20)
         notes = tab.StringCol(500)
-        offset = tab.Float32Col(dflt=np.nan)
-        runSupplyVoltage = tab.Float32Col(dflt=np.nan)
+        offset = tab.Float64Col(dflt=np.nan)
+        runSupplyVoltage = tab.Float64Col(dflt=np.nan)
         runSupplyVoltageSource = tab.StringCol(10)
-        rsq = tab.Float32Col(dflt=np.nan)
+        rsq = tab.Float64Col(dflt=np.nan)
         sensorType = tab.StringCol(20)
         signal = tab.StringCol(26)
-        slope = tab.Float32Col(dflt=np.nan)
+        slope = tab.Float64Col(dflt=np.nan)
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
-        v = tab.Float32Col(shape=(50,))
-        x = tab.Float32Col(shape=(50,))
-        y = tab.Float32Col(shape=(50,))
+        v = tab.Float64Col(shape=(50,))
+        x = tab.Float64Col(shape=(50,))
+        y = tab.Float64Col(shape=(50,))
 
     return CalibrationTable
 
@@ -1364,9 +1395,9 @@ def create_run_table_class(filteredrun, unfilteredrun):
     class RunTable(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(unfilteredrun['NICols']):
-            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
+            exec(col + " = tab.Float64Col(shape=(12000, ), pos=i)")
         for k, col in enumerate(VNavCols):
-            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
+            exec(col + " = tab.Float64Col(shape=(12000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(unfilteredrun['par'].items()):
             pos = k + 1 + i
             if isinstance(val, type(1)):
@@ -1396,9 +1427,9 @@ def create_run_table_class(filteredrun, unfilteredrun):
 
         for k, col in enumerate(processedCols):
             if col == 'tau':
-                exec(col + " = tab.Float32Col(pos=i + 1 + k)")
+                exec(col + " = tab.Float64Col(pos=i + 1 + k)")
             else:
-                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i + 1 + k)")
+                exec(col + " = tab.Float64Col(shape=(12000, ), pos=i + 1 + k)")
 
         # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val, processedCols)
