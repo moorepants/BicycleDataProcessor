@@ -54,65 +54,11 @@ class Signal(np.ndarray):
         self.units = getattr(obj, 'units', None)
 
     def __array_wrap__(self, outputArray, context=None):
-        outputArray.units = 'booger'
+        # doesn't support these things in basic ufunc calls...maybe one day
+        outputArray.name = None
+        outputArray.source = None
+        outputArray.units = None
         return np.ndarray.__array_wrap__(self, outputArray, context)
-
-    def __add__(self, otherSignal):
-        '''Defines how signals add togther.'''
-
-        try:
-            if self.units != otherSignal.units:
-                raise ValueError('Cannot add signals of differing units.')
-            elif self.sampleRate != otherSignal.sampleRate:
-                raise ValueError('Cannot add signals with different sample rates.')
-            else:
-                newSig = np.add(self, otherSignal)
-                data = {'runid': self.runid,
-                        'name': None,
-                        'units': self.units,
-                        'source': None,
-                        'sampleRate': self.sampleRate}
-                return Signal(newSig, data)
-        except AttributeError:
-                return np.add(self, otherSignal)
-
-    def __mul__(self, otherSignal):
-        '''Returns a new signal.'''
-        try:
-            if self.sampleRate != otherSignal.sampleRate:
-                raise ValueError('Cannot multiply signals with different sample rates.')
-            else:
-                newSig = np.multiply(self, otherSignal)
-                newUnits = self.units + '*' + otherSignal.units
-                data = {'runid': self.runid,
-                        'name': None,
-                        'units': newUnits,
-                        'source': None,
-                        'sampleRate': self.sampleRate,
-                        'signal': newSig,
-                        'numberOfSamples': len(newSig)}
-                return Signal(newSig, data)
-        except AttributeError:
-                return np.multiply(self, otherSignal)
-
-    def __div__(self, otherSignal):
-        '''Returns a new signal.'''
-        try:
-            if self.sampleRate != otherSignal.sampleRate:
-                raise ValueError('Cannot multiply signals with different sample rates.')
-            else:
-                newSig = np.divide(self, otherSignal)
-                newUnits = self.units + '/' + otherSignal.units
-                data = {'runid': self.runid,
-                        'name': None,
-                        'units': newUnits,
-                        'source': None,
-                        'sampleRate': self.sampleRate,
-                        'signal': newSig,
-                        'numberOfSamples': len(newSig)}
-                return Signal(newSig, data)
-        except AttributeError:
-                return np.divide(self, otherSignal)
 
     def plot(self):
         '''Plots and returns the time signal versus time.'''
@@ -128,9 +74,10 @@ class Signal(np.ndarray):
         '''Returns the frequency content of the signal.'''
         raise NotImplementedError('This is a place holder.')
 
-    def derivative(self):
+    def time_derivative(self):
         '''Returns the derivative of the signal.'''
-        raise NotImplementedError('This is a place holder.')
+        time = time_vector(len(self), self.sampleRate)
+        return derivative(time, self, method='combination')
 
     def filter(self, frequency):
         '''Returns the low pass Butterworth filtered signal at the specifited
@@ -668,12 +615,9 @@ def derivative(x, y, method='forward'):
             else:
                 dxdy[i] = (y[i + 1] - y[i - 1])/2/(x[i] - x[i - 1])
         return dxdy
-    elif method == 'backward':
-        print 'There is no backward difference method defined, want to write one?'
-    elif method == 'central':
-        print 'There is no central difference method defined, want to write one?'
     else:
-        print 'There is no %s method here! Try Again' % method
+        raise NotImplementedError('There is no %s method here! Try Again' %
+            method)
 
 def pad_with_zeros(num, digits):
     '''
