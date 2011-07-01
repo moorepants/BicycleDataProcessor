@@ -87,7 +87,7 @@ class Signal(np.ndarray):
     def truncate(self, tau):
         '''Returns the shifted and truncated signal based on the provided
         timeshift, tau.'''
-        return truncate_data(self, self.source, self.sampleRate, tau)
+        return truncate_data(self, tau)
 
     def as_dictionary(self):
         '''Returns the signal data as a dictionary.'''
@@ -214,7 +214,7 @@ class RawSignal(Signal):
 
         if self.calibrationType in ['none', 'matrix'] or self.name in doNotScale:
             print "Not scaling {0}".format(self.name)
-            return self.name, self.signal, self.units
+            return self
         else:
             print "Scaling {0}".format(self.name)
             # pick the largest calibration date without surpassing the run date
@@ -249,8 +249,9 @@ class RawSignal(Signal):
                 raise StandardError("None of the calibration equations worked.")
             calibratedSignal.name = calibData['signal']
             calibratedSignal.units = calibData['units']
+            calibratedSignal.source = self.source
 
-            return calibratedSignal
+            return calibratedSignal.view(Signal)
 
     def plot_scaled(self):
         '''Plots and returns the time series versus time.'''
@@ -361,42 +362,42 @@ class Run():
         if forceRecalc == True:
             # calibrate the signals for the run
             for sig in self.rawSignals.values():
-                sD = sig.as_dictionary()
-                sD['name'], sD['signal'], sD['units'] = sig.scale()
-                self.calibratedSignals[sD['name']] = Signal(sD)
+                calibSig = sig.scale()
+                self.calibratedSignals[calibSig.name] = calibSig
 
             # calculate tau for this run
             self.tau = find_timeshift(
-                self.calibratedSignals['AccelerometerAccelerationY'].signal,
-                self.calibratedSignals['AccelerationZ'].signal,
+                self.calibratedSignals['AccelerometerAccelerationY'],
+                self.calibratedSignals['AccelerationZ'],
                 self.metadata['NISampleRate'],
                 self.metadata['Speed'])
 
             # truncate all the raw data signals
             for name, sig in self.calibratedSignals.items():
-                trData = sig.as_dictionary()
-                trData['signal'] = sig.truncate(self.tau)
-                self.truncatedSignals[name] = Signal(trData)
+                self.truncatedSignals[name] = sig.truncate(self.tau)
 
             # compute the final output signals
-            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce'].signal
-            self.computedSignals['RearWheelRate'] = self.truncatedSignals['RearWheelRate'].signal
-            self.computedSignals['RollAngle'] = self.truncatedSignals['RollAngle'].signal
-            self.computedSignals['SteerAngle'] = self.truncatedSignals['SteerAngle'].signal
-            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce'].signal
+            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce']
+            self.computedSignals['RearWheelRate'] = self.truncatedSignals['RearWheelRate']
+            self.computedSignals['RollAngle'] = self.truncatedSignals['RollAngle']
+            self.computedSignals['SteerAngle'] = self.truncatedSignals['SteerAngle']
+            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce']
             self.computedSignals['ForwardSpeed'] = (
                 self.bikeParameters['rR'].nominal_value *
-                self.truncatedSignals['RearWheelRate'].signal)
+                self.truncatedSignals['RearWheelRate'])
             # these are both in degrees
             self.computedSignals['SteerRate'] = steer_rate(
-                self.truncatedSignals['ForkRate'].signal,
-                self.truncatedSignals['AngularRateZ'].signal)
+                self.truncatedSignals['ForkRate'],
+                self.truncatedSignals['AngularRateZ'])
             yr, rr, pr = yaw_roll_pitch_rate(
-                    self.truncatedSignals['AngularRateX'].signal,
-                    self.truncatedSignals['AngularRateY'].signal,
-                    self.truncatedSignals['AngularRateZ'].signal,
+                    self.truncatedSignals['AngularRateX'],
+                    self.truncatedSignals['AngularRateY'],
+                    self.truncatedSignals['AngularRateZ'],
                     self.bikeParameters['lam'].nominal_value,
-                    rollAngle=self.truncatedSignals['RollAngle'].signal)
+                    rollAngle=self.truncatedSignals['RollAngle'])
+            yr.units = 'degree'
+            rr.units = 'degree'
+            pr.units = 'degree'
             self.computedSignals['YawRate'] = yr
             self.computedSignals['RollRate'] = rr
             self.computedSignals['PitchRate'] = pr
@@ -424,7 +425,7 @@ class Run():
             time = time_vector(len(self.computedSignals[arg]), sampleRate)
             plt.plot(time, self.computedSignals[arg])
 
-        plt.legend(args)
+        plt.legend([arg + ' [' + self.computedSignals[arg].units + ']' for arg in args])
 
         plt.title('Rider: ' + self.metadata['Rider'] +
                   ', Speed: ' + str(self.metadata['Speed']) + 'm/s\n' +
@@ -741,18 +742,14 @@ def get_cell(datatable, colname, rownum):
 
     return cell
 
-def truncate_data(signal, source, sampleRate, tau):
+def truncate_data(signal, tau):
     '''
     Returns the truncated vectors with respect to the timeshift tau.
 
     Parameters
     ---------
-    signal : ndarray, shape(n, )
+    signal : ndarray (Signal), shape(n, )
         A time signal from the NIData or the VNavData.
-    source : string
-        Either 'NI' or 'VN' depending on which signal you have.
-    sampleRate : int
-        The sample frequency.
     tau : float
         The time shift.
 
@@ -762,7 +759,7 @@ def truncate_data(signal, source, sampleRate, tau):
         The truncated time signal.
 
     '''
-    t = time_vector(len(signal), sampleRate)
+    t = time_vector(len(signal), signal.sampleRate)
 
     # shift the ni data cause it is the cleaner signal
     tni = t - tau
@@ -771,10 +768,19 @@ def truncate_data(signal, source, sampleRate, tau):
     # make the common time interval
     tcom = tvn[np.nonzero(tvn < tni[-1])]
 
-    if source == 'NI':
+    if signal.source == 'NI':
         truncated = sp.interp(tcom, tni, signal)
-    elif source == 'VN':
+        # this is now an ndarray instead of a Signal
+        truncated = truncated.view(Signal)
+        truncated.units = signal.units
+        truncated.source = signal.source
+        truncated.runid = signal.runid
+        truncated.name = signal.name
+        truncated.sampleRate = signal.sampleRate
+    elif signal.source == 'VN':
         truncated = signal[np.nonzero(tvn <= tcom[-1])]
+    else:
+        raise ValueError('You need to define a source.')
 
     return truncated
 
@@ -894,7 +900,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     Parameters
     ----------
     NIacc : ndarray, shape(n, )
-        The acceleration of the NI accelerometer in its local Y direction. 
+        The acceleration of the NI accelerometer in its local Y direction.
     VNacc : ndarray, shape(n, )
         The acceleration of the VN-100 in its local Z direction. Should be the
         same length as NIacc and contains the same signal albiet time shifted.
