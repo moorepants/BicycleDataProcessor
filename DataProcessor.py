@@ -30,69 +30,97 @@ class Signal(np.ndarray):
                    'feet/second->meter/second': 12. * 2.54 / 100.,
                    'mile/hour->meter/second': 0.00254 * 12 / 5280. / 3600.}
 
-    def __new__(cls, input_array, metadata=None):
+    def __new__(cls, inputArray, metadata):
+        '''Returns an instance of the Signal class with the addition signal
+        data.'''
+        if len(inputArray.shape) > 1:
+            raise ValueError('Signals must be arrays of one dimension.')
         # cast the input array into my subclass of ndarray
-        obj = np.asarray(input_array).view(cls)
-        #
-        obj.metadata = metadata
+        obj = np.asarray(inputArray).view(cls)
+        # add the metadata to the object
+        obj.name = metadata['name']
+        obj.runid = metadata['runid']
+        obj.sampleRate = metadata['sampleRate']
+        obj.source = metadata['source']
+        obj.units = metadata['units']
         return obj
 
-    def __array__finalize__(self, obj):
+    def __array_finalize__(self, obj):
         if obj is None: return
-        self.metadata = getattr(obj, 'metadata', None)
+        self.name = getattr(obj, 'name', None)
+        self.runid = getattr(obj, 'runid', None)
+        self.sampleRate = getattr(obj, 'sampleRate', None)
+        self.source = getattr(obj, 'source', None)
+        self.units = getattr(obj, 'units', None)
 
-    def __array_wrap__(self, output_array, context=None):
-        return np.ndarray.__array_wrap__(self, output_array, context)
+    def __array_wrap__(self, outputArray, context=None):
+        outputArray.units = 'booger'
+        return np.ndarray.__array_wrap__(self, outputArray, context)
 
-    ###def __add__(self, otherSignal):
-        ###'''Defines how signals add togther.'''
-###
-        ###if self.units != otherSignal.units:
-            ###raise ValueError('Cannot add signals of differing units.')
-        ###elif self.sampleRate != otherSignal.sampleRate:
-            ###raise ValueError('Cannot add signals with different sample rates.')
-        ###elif self.numberOfSamples != otherSignal.numberOfSamples:
-            ###raise ValueError('Cannot add signals with different lengths.')
-        ###else:
-            ###newSig = self.signal + otherSignal.signal
-            ###data = {'runid': self.runid,
-                    ###'name': None,
-                    ###'units': self.units,
-                    ###'source': None,
-                    ###'sampleRate': self.sampleRate,
-                    ###'signal': newSig,
-                    ###'numberOfSamples': len(newSig)}
-            ###return Signal(data)
-###
-    ###def __mul__(self, otherSignal):
-        ###'''Returns a new signal.'''
-        ###if self.sampleRate != otherSignal.sampleRate:
-            ###raise ValueError('Cannot multiply signals with different sample rates.')
-        ###elif self.numberOfSamples != otherSignal.numberOfSamples:
-            ###raise ValueError('Cannot add signals with different lengths.')
-        ###else:
-            ###newSig = self.signal * otherSignal.signal
-            ###if self.units == otherSignal.units:
-                ###newUnits = self.units + '**2'
-            ###else:
-                ###newUnits = self.units + '*' + otherSignal.units
-            ###data = {'runid': self.runid,
-                    ###'name': None,
-                    ###'units': newUnits,
-                    ###'source': None,
-                    ###'sampleRate': self.sampleRate,
-                    ###'signal': newSig,
-                    ###'numberOfSamples': len(newSig)}
-            ###return Signal(data)
+    def __add__(self, otherSignal):
+        '''Defines how signals add togther.'''
+
+        try:
+            if self.units != otherSignal.units:
+                raise ValueError('Cannot add signals of differing units.')
+            elif self.sampleRate != otherSignal.sampleRate:
+                raise ValueError('Cannot add signals with different sample rates.')
+            else:
+                newSig = np.add(self, otherSignal)
+                data = {'runid': self.runid,
+                        'name': None,
+                        'units': self.units,
+                        'source': None,
+                        'sampleRate': self.sampleRate}
+                return Signal(newSig, data)
+        except AttributeError:
+                return np.add(self, otherSignal)
+
+    def __mul__(self, otherSignal):
+        '''Returns a new signal.'''
+        try:
+            if self.sampleRate != otherSignal.sampleRate:
+                raise ValueError('Cannot multiply signals with different sample rates.')
+            else:
+                newSig = np.multiply(self, otherSignal)
+                newUnits = self.units + '*' + otherSignal.units
+                data = {'runid': self.runid,
+                        'name': None,
+                        'units': newUnits,
+                        'source': None,
+                        'sampleRate': self.sampleRate,
+                        'signal': newSig,
+                        'numberOfSamples': len(newSig)}
+                return Signal(newSig, data)
+        except AttributeError:
+                return np.multiply(self, otherSignal)
+
+    def __div__(self, otherSignal):
+        '''Returns a new signal.'''
+        try:
+            if self.sampleRate != otherSignal.sampleRate:
+                raise ValueError('Cannot multiply signals with different sample rates.')
+            else:
+                newSig = np.divide(self, otherSignal)
+                newUnits = self.units + '/' + otherSignal.units
+                data = {'runid': self.runid,
+                        'name': None,
+                        'units': newUnits,
+                        'source': None,
+                        'sampleRate': self.sampleRate,
+                        'signal': newSig,
+                        'numberOfSamples': len(newSig)}
+                return Signal(newSig, data)
+        except AttributeError:
+                return np.divide(self, otherSignal)
 
     def plot(self):
-        '''Plots and returns the time series versus time.'''
-        time = time_vector(self.numberOfSamples, self.sampleRate)
-        line = plt.plot(time, self.signal)
-        plt.xlabel('Time [s]')
-        plt.ylabel(self.units)
-        plt.title('{0} signal during run {1}'.format(self.name,
-                  str(self.runid)))
+        '''Plots and returns the time signal versus time.'''
+        time = time_vector(len(self), self.sampleRate)
+        line = plt.plot(time, self)
+        plt.xlabel('Time [second]')
+        plt.ylabel(self.name + ' [' + self.units + ']')
+        plt.title('Signal plot during run {0}'.format(self.name))
         plt.show()
         return line
 
@@ -135,9 +163,9 @@ class Signal(np.ndarray):
                 newSig = self / self.conversions[conversion]
             except KeyError:
                 raise KeyError(('Conversion from {0} to {1} is not ' +
-                               'defined.').format(self.units, units))
+                    'possible or not defined.').format(self.units, units))
         # make the new signal
-        self.units = units
+        newSig.units = units
 
         return newSig
 
@@ -738,17 +766,17 @@ def get_cell(datatable, colname, rownum):
 
     return cell
 
-def truncate_data(series, typ, fs, tau):
+def truncate_data(signal, source, sampleRate, tau):
     '''
     Returns the truncated vectors with respect to the timeshift tau.
 
     Parameters
     ---------
-    series : ndarray, shape(n, )
-        A time series from the NIData or the VNavData.
-    typ : string
+    signal : ndarray, shape(n, )
+        A time signal from the NIData or the VNavData.
+    source : string
         Either 'NI' or 'VN' depending on which signal you have.
-    fs : int
+    sampleRate : int
         The sample frequency.
     tau : float
         The time shift.
@@ -756,11 +784,10 @@ def truncate_data(series, typ, fs, tau):
     Returns
     -------
     truncated : ndarray, shape(m, )
-        The truncated time series.
+        The truncated time signal.
 
     '''
-    n = len(series)
-    t = time_vector(n, fs)
+    t = time_vector(len(signal), sampleRate)
 
     # shift the ni data cause it is the cleaner signal
     tni = t - tau
@@ -769,10 +796,10 @@ def truncate_data(series, typ, fs, tau):
     # make the common time interval
     tcom = tvn[np.nonzero(tvn < tni[-1])]
 
-    if typ == 'NI':
-        truncated = sp.interp(tcom, tni, series)
-    elif typ == 'VN':
-        truncated = series[np.nonzero(tvn <= tcom[-1])]
+    if source == 'NI':
+        truncated = sp.interp(tcom, tni, signal)
+    elif source == 'VN':
+        truncated = signal[np.nonzero(tvn <= tcom[-1])]
 
     return truncated
 
