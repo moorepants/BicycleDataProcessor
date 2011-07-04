@@ -95,8 +95,7 @@ class Signal(np.ndarray):
                 'name': self.name,
                 'units': self.units,
                 'source': self.source,
-                'sampleRate': self.sampleRate,
-                'numberOfSamples': self.numberOfSamples}
+                'sampleRate': self.sampleRate}
         return data
 
     def convert_units(self, units):
@@ -377,61 +376,74 @@ class Run():
                 self.truncatedSignals[name] = sig.truncate(self.tau)
 
             # compute the final output signals
-            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce']
-            self.computedSignals['RearWheelRate'] = self.truncatedSignals['RearWheelRate']
-            self.computedSignals['RollAngle'] = self.truncatedSignals['RollAngle']
-            self.computedSignals['SteerAngle'] = self.truncatedSignals['SteerAngle']
-            self.computedSignals['PullForce'] = self.truncatedSignals['PullForce']
-            self.computedSignals['ForwardSpeed'] = (
-                self.bikeParameters['rR'].nominal_value *
+            noChange = ['FiveVolts',
+                        'PullForce',
+                        'PushButton',
+                        'RearWheelRate',
+                        'RollAngle',
+                        'SteerAngle',
+                        'ThreeVolts']
+            for sig in noChange:
+                self.computedSignals[sig] = self.truncatedSignals[sig]
+            self.computedSignals['ForwardSpeed'] =\
+                (self.bikeParameters['rR'].nominal_value *
                 self.truncatedSignals['RearWheelRate'])
-            # these are both in degrees
-            self.computedSignals['SteerRate'] = steer_rate(
-                self.truncatedSignals['ForkRate'],
-                self.truncatedSignals['AngularRateZ'])
-            yr, rr, pr = yaw_roll_pitch_rate(
-                    self.truncatedSignals['AngularRateX'],
-                    self.truncatedSignals['AngularRateY'],
-                    self.truncatedSignals['AngularRateZ'],
-                    self.bikeParameters['lam'].nominal_value,
-                    rollAngle=self.truncatedSignals['RollAngle'])
-            yr.units = 'degree'
-            rr.units = 'degree'
-            pr.units = 'degree'
-            self.computedSignals['YawRate'] = yr
-            self.computedSignals['RollRate'] = rr
-            self.computedSignals['PitchRate'] = pr
+            #self.computedSignals['SteerRate'] =\
+                #steer_rate(self.truncatedSignals['ForkRate'],
+                #self.truncatedSignals['AngularRateZ'].\
+                        #convert_units('radian/second'))
+            #yr, rr, pr = yaw_roll_pitch_rate(
+                    #self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
+                    #self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
+                    #self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
+                    #self.bikeParameters['lam'].nominal_value,
+                    #rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
+            #yr.units = 'radian/second'
+            #rr.units = 'radian/second'
+            #pr.units = 'radian/second'
+            #self.computedSignals['YawRate'] = yr
+            #self.computedSignals['RollRate'] = rr
+            #self.computedSignals['PitchRate'] = pr
         else:
+            # else just get the values stored in the database
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
 
-    def plot(self, *args):
+    def plot(self, signalType='computed',  *args):
         '''
         Plots the time series of various signals.
 
         Parameters
         ----------
+        signalType : string, optional
+            This allows you to plot from the various signal types. Options are
+            'computed', 'truncated', 'calibrated', 'raw'.
         args* : string
             These should be strings that correspond to processed data
             columns.
-        truncated : boolean
-            If true, then the plots will show the data that has been shifted
-            and truncated.
 
         '''
+        # this currently only works if the sample rates from both sources is
+        # the same
         sampleRate = self.metadata['NISampleRate']
 
-        for i, arg in enumerate(args):
-            time = time_vector(len(self.computedSignals[arg]), sampleRate)
-            plt.plot(time, self.computedSignals[arg])
+        mapping = {'computed': self.computedSignals,
+                   'truncated': self.truncatedSignals,
+                   'calibrated': self.calibratedSignals,
+                   'raw': self.rawSignals}
 
-        plt.legend([arg + ' [' + self.computedSignals[arg].units + ']' for arg in args])
+        for i, arg in enumerate(args):
+            time = time_vector(len(mapping[signalType][arg]), sampleRate)
+            plt.plot(time, mapping[signalType][arg])
+
+        plt.legend([arg + ' [' + mapping[signalType][arg].units + ']' for arg in args])
 
         plt.title('Rider: ' + self.metadata['Rider'] +
                   ', Speed: ' + str(self.metadata['Speed']) + 'm/s\n' +
                   'Maneuver: ' + self.metadata['Maneuver'] +
                   ', Environment: ' + self.metadata['Environment'] + '\n' +
                   'Notes: ' + self.metadata['Notes'])
+
         plt.grid()
 
         plt.show()
@@ -748,7 +760,7 @@ def truncate_data(signal, tau):
 
     Parameters
     ---------
-    signal : ndarray (Signal), shape(n, )
+    signal : Signal(ndarray), shape(n, )
         A time signal from the NIData or the VNavData.
     tau : float
         The time shift.
@@ -769,18 +781,13 @@ def truncate_data(signal, tau):
     tcom = tvn[np.nonzero(tvn < tni[-1])]
 
     if signal.source == 'NI':
-        truncated = sp.interp(tcom, tni, signal)
+        truncated = np.interp(tcom, tni, signal)
         # this is now an ndarray instead of a Signal
-        truncated = truncated.view(Signal)
-        truncated.units = signal.units
-        truncated.source = signal.source
-        truncated.runid = signal.runid
-        truncated.name = signal.name
-        truncated.sampleRate = signal.sampleRate
+        truncated = Signal(truncated, signal.as_dictionary())
     elif signal.source == 'VN':
         truncated = signal[np.nonzero(tvn <= tcom[-1])]
     else:
-        raise ValueError('You need to define a source.')
+        raise ValueError('No source was defined in this signal.')
 
     return truncated
 
@@ -924,7 +931,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     # make a time vector
     time = time_vector(N, sampleRate)
 
-    # scale the NI signal from volts to m/s**2, and switch the sign
+    # the signals are opposite sign of each other
     niSig = -niAcc
     vnSig = vnAcc
 
@@ -1220,6 +1227,17 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     # combine the VNavCols from unfiltered and filtered
     vnCols = set(filteredRun['VNavCols'] + unfilteredRun['VNavCols'])
 
+    vnUnitMap = {'MagX': 'unitless',
+                 'MagY': 'unitless',
+                 'MagZ': 'unitless',
+                 'AccerlerationX': 'meter/second/second',
+                 'AccerlerationY': 'meter/second/second',
+                 'AccerlerationZ': 'meter/second/second',
+                 'AngularRateX': 'degree/second',
+                 'AngularRateY': 'degree/second',
+                 'AngularRateZ': 'degree/second',
+                 'Temperature': 'kelvin'}
+
     for sig in set(niCols + list(vnCols) + processedCols):
         row['signal'] = sig
 
@@ -1242,6 +1260,7 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
             row['source'] = 'VN'
             row['isRaw'] = True
             row['calibration'] = 'none'
+            row['units'] = vnUnitMap[sig]
         elif sig in processedCols:
             row['source'] = 'NA'
             row['isRaw'] = False
@@ -1302,6 +1321,18 @@ def create_database(filename='InstrumentedBicycleData.h5',
     '''Creates an HDF5 file for data collected from the instrumented
     bicycle.'''
 
+    if os.path.exists(filename):
+        response = raw_input(('{0} already exists.\n' +
+            'Do you want to overwrite it? (y or n)\n').format(filename))
+        if response == 'y':
+            print "{0} will be overwritten".format(filename)
+            pass
+        else:
+            print "{0} was not overwritten.".format(filename)
+            return
+
+    print "Creating database..."
+
     # open a new hdf5 file for writing
     data = tab.openFile(filename, mode='w',
                         title='Instrumented Bicycle Data')
@@ -1335,6 +1366,8 @@ def create_database(filename='InstrumentedBicycleData.h5',
     rtable.flush()
 
     data.close()
+
+    print "{0} successfuly created.".format(filename)
 
 def create_signal_table_class():
     '''Creates a class that is used to describe the table containing
