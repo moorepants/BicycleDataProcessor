@@ -388,41 +388,43 @@ class Run():
             self.computedSignals['ForwardSpeed'] =\
                 (self.bikeParameters['rR'].nominal_value *
                 self.truncatedSignals['RearWheelRate'])
-            #self.computedSignals['SteerRate'] =\
-                #steer_rate(self.truncatedSignals['ForkRate'],
-                #self.truncatedSignals['AngularRateZ'].\
-                        #convert_units('radian/second'))
-            #yr, rr, pr = yaw_roll_pitch_rate(
-                    #self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
-                    #self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
-                    #self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
-                    #self.bikeParameters['lam'].nominal_value,
-                    #rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
-            #yr.units = 'radian/second'
-            #rr.units = 'radian/second'
-            #pr.units = 'radian/second'
-            #self.computedSignals['YawRate'] = yr
-            #self.computedSignals['RollRate'] = rr
-            #self.computedSignals['PitchRate'] = pr
+            self.computedSignals['SteerRate'] =\
+                steer_rate(self.truncatedSignals['ForkRate'],
+                self.truncatedSignals['AngularRateZ'].\
+                        convert_units('radian/second'))
+            yr, rr, pr = yaw_roll_pitch_rate(
+                    self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
+                    self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
+                    self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
+                    self.bikeParameters['lam'].nominal_value,
+                    rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
+            yr.units = 'radian/second'
+            rr.units = 'radian/second'
+            pr.units = 'radian/second'
+            self.computedSignals['YawRate'] = yr
+            self.computedSignals['RollRate'] = rr
+            self.computedSignals['PitchRate'] = pr
         else:
             # else just get the values stored in the database
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
 
-    def plot(self, signalType='computed',  *args):
+    def plot(self, *args, **kwargs):
         '''
         Plots the time series of various signals.
 
         Parameters
         ----------
+        signalName : string
+            These should be strings that correspond to processed data
+            columns.
         signalType : string, optional
             This allows you to plot from the various signal types. Options are
             'computed', 'truncated', 'calibrated', 'raw'.
-        args* : string
-            These should be strings that correspond to processed data
-            columns.
 
         '''
+        if not kwargs:
+            signalType = 'computed'
         # this currently only works if the sample rates from both sources is
         # the same
         sampleRate = self.metadata['NISampleRate']
@@ -433,8 +435,9 @@ class Run():
                    'raw': self.rawSignals}
 
         for i, arg in enumerate(args):
-            time = time_vector(len(mapping[signalType][arg]), sampleRate)
-            plt.plot(time, mapping[signalType][arg])
+            signal = mapping[signalType][arg]
+            time = time_vector(len(signal), sampleRate)
+            plt.plot(time, signal)
 
         plt.legend([arg + ' [' + mapping[signalType][arg].units + ']' for arg in args])
 
@@ -1230,12 +1233,15 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     vnUnitMap = {'MagX': 'unitless',
                  'MagY': 'unitless',
                  'MagZ': 'unitless',
-                 'AccerlerationX': 'meter/second/second',
-                 'AccerlerationY': 'meter/second/second',
-                 'AccerlerationZ': 'meter/second/second',
+                 'AccelerationX': 'meter/second/second',
+                 'AccelerationY': 'meter/second/second',
+                 'AccelerationZ': 'meter/second/second',
                  'AngularRateX': 'degree/second',
                  'AngularRateY': 'degree/second',
                  'AngularRateZ': 'degree/second',
+                 'AngularRotationX': 'degree',
+                 'AngularRotationY': 'degree',
+                 'AngularRotationZ': 'degree',
                  'Temperature': 'kelvin'}
 
     for sig in set(niCols + list(vnCols) + processedCols):
@@ -1315,6 +1321,10 @@ def get_two_runs(pathToH5):
               unfilteredRun['par']['RunID'])
 
     return filteredRun, unfilteredRun
+
+def load_database(filename='InstrumentedBicycleData.h5', mode='r'):
+    '''Returns the a pytables database.'''
+    return tab.openFile(filename, mode=mode)
 
 def create_database(filename='InstrumentedBicycleData.h5',
                     pathToH5='../BicycleDAQ/data/h5'):
