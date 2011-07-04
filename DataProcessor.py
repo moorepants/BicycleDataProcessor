@@ -388,10 +388,12 @@ class Run():
             self.computedSignals['ForwardSpeed'] =\
                 (self.bikeParameters['rR'].nominal_value *
                 self.truncatedSignals['RearWheelRate'])
+            self.computedSignals['ForwardSpeed'].units = 'meter/second'
             self.computedSignals['SteerRate'] =\
                 steer_rate(self.truncatedSignals['ForkRate'],
                 self.truncatedSignals['AngularRateZ'].\
                         convert_units('radian/second'))
+            self.computedSignals['SteerRate'].units = 'radian/second'
             yr, rr, pr = yaw_roll_pitch_rate(
                     self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
                     self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
