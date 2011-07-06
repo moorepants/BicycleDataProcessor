@@ -386,20 +386,31 @@ class Run():
                         'PullForce',
                         'PushButton',
                         'RearWheelRate',
-                        'RollAngle',
                         'SteerAngle',
                         'ThreeVolts']
             for sig in noChange:
                 self.computedSignals[sig] = self.truncatedSignals[sig]
+
+            # this is a quick fix for the miscalibrated roll angle.
+            rollAngle  = subtract_mean(
+                    self.truncatedSignals['RollAngle']).filter(50.)
+            rollAngle.units = 'degree'
+            rollAngle.name = 'RollAngle'
+            self.computedSignals['RollAngle'] = rollAngle
+
             self.computedSignals['ForwardSpeed'] =\
                 (self.bikeParameters['rR'].nominal_value *
                 self.truncatedSignals['RearWheelRate'])
             self.computedSignals['ForwardSpeed'].units = 'meter/second'
+            self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
+
             self.computedSignals['SteerRate'] =\
                 steer_rate(self.truncatedSignals['ForkRate'],
                 self.truncatedSignals['AngularRateZ'].\
                         convert_units('radian/second'))
             self.computedSignals['SteerRate'].units = 'radian/second'
+            self.computedSignals['SteerRate'].name = 'SteerRate'
+
             yr, rr, pr = yaw_roll_pitch_rate(
                     self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
                     self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
@@ -407,16 +418,26 @@ class Run():
                     self.bikeParameters['lam'].nominal_value,
                     rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
             yr.units = 'radian/second'
+            yr.name = 'YawRate'
             rr.units = 'radian/second'
+            rr.name = 'RollRate'
             pr.units = 'radian/second'
+            pr.name = 'PitchRate'
+
             self.computedSignals['YawRate'] = yr
             self.computedSignals['RollRate'] = rr
             self.computedSignals['PitchRate'] = pr
-            self.computedSignals['SteerTorque'] = steer_torque(
+
+            steerTorque = steer_torque(
                 self.computedSignals['SteerRate'],
-                self.computedSignals['SteerRate'].time_derivative().filter(50.),
-                self.truncatedSignals['SteerTubeTorque'],
-                )
+                self.computedSignals['SteerRate'].time_derivative(),
+                self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter'),
+                rigid.steer_assembly_moment_of_inertia(fork=False,
+                    wheel=False).nominal_value,
+                0.3475, 0.0861)
+            steerTorque.units = 'newton*meter'
+            steerTorque.name = 'SteerTorque'
+            self.computedSignals['SteerTorque'] = steerTorque
         else:
             # else just get the values stored in the database
             for col in computedCols:
@@ -437,7 +458,8 @@ class Run():
 
         '''
         if not kwargs:
-            signalType = 'computed'
+            kwargs = {'signalType': 'computed'}
+
         # this currently only works if the sample rates from both sources is
         # the same
         sampleRate = self.metadata['NISampleRate']
@@ -448,11 +470,11 @@ class Run():
                    'raw': self.rawSignals}
 
         for i, arg in enumerate(args):
-            signal = mapping[signalType][arg]
+            signal = mapping[kwargs['signalType']][arg]
             time = time_vector(len(signal), sampleRate)
             plt.plot(time, signal)
 
-        plt.legend([arg + ' [' + mapping[signalType][arg].units + ']' for arg in args])
+        plt.legend([arg + ' [' + mapping[kwargs['signalType']][arg].units + ']' for arg in args])
 
         plt.title('Rider: ' + self.metadata['Rider'] +
                   ', Speed: ' + str(self.metadata['Speed']) + 'm/s' +
@@ -501,7 +523,7 @@ Notes: {6}'''.format(
 
         return line + '\n' + info + '\n' + line
 
-def steer_torque(steerRate, steerAccel, steerTubeTorque, handleBarInertia,
+def steer_torque(steerRate, steerAccel, steerTubeTorque, handlebarInertia,
         damping, friction):
     '''Returns the steer torque applied by the rider.
 
@@ -516,7 +538,7 @@ def steer_torque(steerRate, steerAccel, steerTubeTorque, handleBarInertia,
     steerTubeTorque : ndarray, shape(n,)
         The torque measured in the steer tube between the handlebars and the
         fork.
-    handlebarIntertia : float
+    handlebarInertia : float
         The inertia of the handlebars. Includes everything above and including
         the steer tube torque sensor.
     damping : float
