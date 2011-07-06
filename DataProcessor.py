@@ -14,9 +14,11 @@ import numpy as np
 import scipy as sp
 from scipy.stats import nanmean, nanmedian
 from scipy.optimize import fmin
-from scipy.signal import butter, lfilter
 from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
+
+# local dependencies
+from dtk.process import *
 from bicycleparameters import bicycleparameters as bp
 
 class Signal(np.ndarray):
@@ -75,14 +77,19 @@ class Signal(np.ndarray):
         raise NotImplementedError('This is a place holder.')
 
     def time_derivative(self):
-        '''Returns the derivative of the signal.'''
+        '''Returns the time derivative of the signal.'''
         time = time_vector(len(self), self.sampleRate)
-        return derivative(time, self, method='combination')
+        dsdt = derivative(time, self, method='combination')
+        dsdt = Signal(dsdt, self.as_dictionary())
+        dsdt.name = dsdt.name + 'Dot'
+        dsdt.units = dsdt.units + '/second'
+        return dsdt
 
     def filter(self, frequency):
         '''Returns the low pass Butterworth filtered signal at the specifited
         frequency.'''
-        return butterworth(self, frequency, self.sampleRate)
+        filteredArray = butterworth(self, frequency, self.sampleRate)
+        return Signal(filteredArray, self.as_dictionary())
 
     def truncate(self, tau):
         '''Returns the shifted and truncated signal based on the provided
@@ -158,7 +165,6 @@ class RawSignal(Signal):
         except IndexError:
             print "{0} does not have a supply voltage.".format(signalName)
             print "-" * 79
-
 
         # get the appropriate sample rate
         if obj.source == 'NI':
@@ -406,6 +412,11 @@ class Run():
             self.computedSignals['YawRate'] = yr
             self.computedSignals['RollRate'] = rr
             self.computedSignals['PitchRate'] = pr
+            self.computedSignals['SteerTorque'] = steer_torque(
+                self.computedSignals['SteerRate'],
+                self.computedSignals['SteerRate'].time_derivative().filter(50.),
+                self.truncatedSignals['SteerTubeTorque'],
+                )
         else:
             # else just get the values stored in the database
             for col in computedCols:
@@ -444,8 +455,8 @@ class Run():
         plt.legend([arg + ' [' + mapping[signalType][arg].units + ']' for arg in args])
 
         plt.title('Rider: ' + self.metadata['Rider'] +
-                  ', Speed: ' + str(self.metadata['Speed']) + 'm/s\n' +
-                  'Maneuver: ' + self.metadata['Maneuver'] +
+                  ', Speed: ' + str(self.metadata['Speed']) + 'm/s' +
+                  ', Maneuver: ' + self.metadata['Maneuver'] +
                   ', Environment: ' + self.metadata['Environment'] + '\n' +
                   'Notes: ' + self.metadata['Notes'])
 
@@ -490,6 +501,37 @@ Notes: {6}'''.format(
 
         return line + '\n' + info + '\n' + line
 
+def steer_torque(steerRate, steerAccel, steerTubeTorque, handleBarInertia,
+        damping, friction):
+    '''Returns the steer torque applied by the rider.
+
+    Parameters
+    ----------
+    steerRate : ndarray, shape(n,)
+        The steer rate, i.e. rate of rotation of the fork/handlebars relative
+        to the bicycle frame.
+    steerAccel : ndarray, shape(n,)
+        The angular acceleration of the fork/handlebars relative to the bicycle
+        frame.
+    steerTubeTorque : ndarray, shape(n,)
+        The torque measured in the steer tube between the handlebars and the
+        fork.
+    handlebarIntertia : float
+        The inertia of the handlebars. Includes everything above and including
+        the steer tube torque sensor.
+    damping : float
+        The damping coefficient associated with the bearing friction.
+    friction : float
+        The columb friction associated with the bearing friction.
+
+    Returns
+    -------
+    steerTorque : ndarray, shape(n,)
+        The steer torque applied by the rider.
+
+    '''
+    return (handlebarInertia * steerAccel - damping * steerRate -
+            np.sign(steerRate) * friction + steerTubeTorque)
 
 def matlab_date_to_object(matDate):
     '''Returns a date time object based on a Matlab datestr() output.
@@ -556,26 +598,6 @@ def split_around_nan(sig):
 
     return indices, arrays
 
-def time_vector(numSamples, sampleRate):
-    '''Returns a time vector starting at zero.
-
-    Parameters
-    ----------
-    numSamples : int or float
-        Total number of samples.
-    sampleRate : int or float
-        Sample rate.
-
-    Returns
-    -------
-    time : ndarray, shape(numSamples,)
-        Time vector starting at zero.
-
-    '''
-    ns = float(numSamples)
-    sr = float(sampleRate)
-    return np.linspace(0., (ns - 1.) / sr, num=ns)
-
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
 
@@ -628,45 +650,6 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
         print 'There is at least one NaN in this bump'
 
     return indices
-
-def derivative(x, y, method='forward'):
-    '''
-    Return the derivative of y with respect to x.
-
-    Parameters:
-    -----------
-    x : ndarray, shape(n,)
-    y : ndarray, shape(n,)
-    method : string
-        'forward' : forward difference
-        'central' : central difference
-        'backward' : backward difference
-        'combination' : forward on the first point, backward on the last and
-        central on the rest
-
-    Returns:
-    --------
-    dydx : ndarray, shape(n,) or shape(n-1,)
-        for combination else shape(n-1,)
-
-    The combo method doesn't work for matrices yet.
-
-    '''
-    if method == 'forward':
-        return np.diff(y)/diff(x)
-    elif method == 'combination':
-        dxdy = np.zeros_like(y)
-        for i, yi in enumerate(y[:]):
-            if i == 0:
-                dxdy[i] = (-3*y[0] + 4*y[1] - y[2])/2/(x[1]-x[0])
-            elif i == len(y) - 1:
-                dxdy[-1] = (3*y[-1] - 4*y[-2] + y[-3])/2/(x[-1] - x[-2])
-            else:
-                dxdy[i] = (y[i + 1] - y[i - 1])/2/(x[i] - x[i - 1])
-        return dxdy
-    else:
-        raise NotImplementedError('There is no %s method here! Try Again' %
-            method)
 
 def pad_with_zeros(num, digits):
     '''
@@ -873,38 +856,6 @@ def sync_error(tau, signal1, signal2, time):
 
     return error
 
-def subtract_mean(sig):
-    '''
-    Subtracts the mean from a signal with nanmean.
-
-    Parameters
-    ----------
-    sig : ndarray, shape(n,)
-
-    Returns
-    -------
-    ndarray, shape(n,)
-        sig minus the mean of sig
-
-    '''
-    return sig - nanmean(sig)
-
-def normalize(sig):
-    '''
-    Normalizes the vector with respect to the maximum value.
-
-    Parameters
-    ----------
-    sig : ndarray, shape(n,)
-
-    Returns
-    -------
-    normSig : ndarray, shape(n,)
-        The signal normalized with respect to the maximum value.
-
-    '''
-    return sig / np.nanmax(sig)
-
 def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     '''Returns the timeshift, tau, of the VectorNav [VN] data relative to the
     National Instruments [NI] data.
@@ -1014,44 +965,6 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
         print "Bad minimizer!! Using the guess, %f, instead." % tau
 
     return tau
-
-def butterworth(data, freq, sampRate, order=2, axis=-1):
-    """
-    Returns the Butterworth filtered data set.
-
-    Parameters:
-    -----------
-    data : ndarray
-    freq : float or int
-        cutoff frequency in hertz
-    sampRate : float or int
-        sampling rate in hertz
-    order : int
-        the order of the Butterworth filter
-    axis : int
-        the axis to filter along
-
-    Returns:
-    --------
-    filteredData : ndarray
-        filtered version of data
-
-    This does a forward and backward Butterworth filter and averages the two.
-
-    """
-    nDim = len(data.shape)
-    dataSlice = '['
-    for dim in range(nDim):
-        if dim == axis or (np.sign(axis) == -1 and dim == nDim + axis):
-            dataSlice = dataSlice + '::-1, '
-        else:
-            dataSlice = dataSlice + ':, '
-    dataSlice = dataSlice[:-2] + '].copy()'
-
-    b, a = butter(order, float(freq) / float(sampRate) / 2.)
-    forwardFilter = lfilter(b, a, data, axis=axis)
-    reverseFilter = lfilter(b, a, eval('data' + dataSlice), axis=axis)
-    return(forwardFilter + eval('reverseFilter' + dataSlice)) / 2.
 
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
