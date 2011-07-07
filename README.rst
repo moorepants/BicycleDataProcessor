@@ -4,13 +4,13 @@ DataProcessor
 
 Description
 ===========
-This program is setup to process the raw data signals collected on the
-instrumented bicycle.
+This program is setup to process the raw data signals collected from the
+instrumented bicycle's data aquistion system (i.e. the output of BicycleDAQ_)
 
 Dependencies
 ============
 These are the versions that I tested the code with, but the code will most
-likely work with older versions with minor adjustments.
+likely work with other versions.
 
 - `Python 2.7.1`__
 .. __: http://www.python.org
@@ -27,3 +27,4 @@ likely work with older versions with minor adjustments.
 - `BicycleParameters 0.1.0dev`__
 .. __: https://github.com/moorepants/BicycleParameters
 
+.. _BicycleDAQ: https://github.com/moorepants/BicycleDAQ
