@@ -88,7 +88,23 @@ class Signal(np.ndarray):
     def filter(self, frequency):
         '''Returns the low pass Butterworth filtered signal at the specifited
         frequency.'''
-        filteredArray = butterworth(self, frequency, self.sampleRate)
+
+        # if the signal has nans, then we need to spline fit the data before
+        # filtering it
+        if np.isnan(self).any():
+            time = time_vector(len(self), self.sampleRate)
+            # remove the nan's in the signal and the time
+            t = time[np.nonzero(np.isnan(self) == False)]
+            v = self[np.nonzero(np.isnan(self) == False)]
+            # fit a spline through the data
+            splineObject = UnivariateSpline(t, v, k=3, s=0)
+            # get the data from the spline function for time
+            splined = splineObject(time)
+        else:
+            splined = self
+
+        filteredArray = butterworth(splined, frequency, self.sampleRate)
+
         return Signal(filteredArray, self.as_dictionary())
 
     def truncate(self, tau):
@@ -383,13 +399,18 @@ class Run():
 
             # compute the final output signals
             noChange = ['FiveVolts',
-                        'PullForce',
                         'PushButton',
                         'RearWheelRate',
                         'SteerAngle',
                         'ThreeVolts']
             for sig in noChange:
                 self.computedSignals[sig] = self.truncatedSignals[sig]
+
+            # the pull force was always from the left side, so far
+            pullForce = -self.truncatedSignals['PullForce']
+            pullForce.name = self.truncatedSignals['PullForce'].name
+            pullForce.units = self.truncatedSignals['PullForce'].units
+            self.computedSignals['PullForce'] = pullForce
 
             # this is a quick fix for the miscalibrated roll angle.
             rollAngle  = subtract_mean(
