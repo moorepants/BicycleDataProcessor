@@ -1,14 +1,17 @@
 =============
 DataProcessor
 =============
+
 Description
 ===========
 This program is setup to process the raw data signals collected on the
 instrumented bicycle.
+
 Dependencies
 ============
 These are the versions that I tested the code with, but the code will most
 likely work with older versions with minor adjustments.
+
 - `Python 2.7.1`__
 .. __: http://www.python.org
 - `Scipy 0.9.0`__
