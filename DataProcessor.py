@@ -356,20 +356,21 @@ class RawSignal(Signal):
             Scaled signal.
 
         """
-        # these will need to be changed once we start measuring them
-        doNotScale = ['LeanPotentiometer',
-                      'HipPotentiometer',
-                      'TwistPotentiometer']
         try:
             self.calibrationType
         except AttributeError:
             raise AttributeError("Can't scale without the calibration type")
 
+        # these will need to be changed once we start measuring them
+        doNotScale = ['LeanPotentiometer',
+                      'HipPotentiometer',
+                      'TwistPotentiometer']
         if self.calibrationType in ['none', 'matrix'] or self.name in doNotScale:
             print "Not scaling {0}".format(self.name)
             return self
         else:
             print "Scaling {0}".format(self.name)
+
             # pick the largest calibration date without surpassing the run date
             calibData = self.sensor.get_data_for_date(self.timeStamp)
 
@@ -377,6 +378,9 @@ class RawSignal(Signal):
             bias = calibData['bias']
             intercept = calibData['offset']
             calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
+
+            print "slope {0}, bias {1}, intercept {2}".format(slope, bias,
+                    intercept)
 
             if self.calibrationType == 'interceptStar':
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
@@ -468,7 +472,6 @@ class Sensor():
             A dictionary containing the sensor calibration data for the
             calibration closest to but not past `runDate`.
 
-
         Notes
         -----
         This method will select the calibration data for the date closest to
@@ -489,14 +492,16 @@ class Sensor():
         return self.data[dateIdPairs[i][0]]
 
 class Run():
-    '''The fundamental class for a run.'''
+    """The fundamental class for a run."""
 
     def __init__(self, runid, database, forceRecalc=False):
-        '''Loads all parameters if available otherwise it generates them.
+        """
+        Loads all the data for a run if available otherwise it generates the
+        data from the raw data.
 
         Parameters
         ----------
-        runid : int or string
+        runid : int or str
             The run id should be an integer, e.g. 5, or a five digit string with
             leading zeros, e.g. '00005'.
         database : pytable object of an hdf5 file
@@ -506,8 +511,9 @@ class Run():
             If true then it will force a recalculation of all the the non raw
             data.
 
-        '''
+        """
 
+        print "Initializing the run object."
         # get the tables
         dataTable = database.root.data.datatable
         signalTable = database.root.data.signaltable
@@ -518,8 +524,6 @@ class Run():
         # make some dictionaries to store all the data
         self.metadata = {}
         self.rawSignals = {}
-        self.calibratedSignals = {}
-        self.truncatedSignals = {}
         self.computedSignals ={}
 
         # make lists of the input and output signals
@@ -529,16 +533,19 @@ class Run():
                         signalTable.where("isRaw == False")]
 
         # store the current data for this run
+        print "Loading metadata from the database."
         for col in dataTable.colnames:
             if col not in (rawDataCols + computedCols):
                 self.metadata[col] = get_cell(dataTable, col, rownum)
 
-        for col in rawDataCols:
-            self.rawSignals[col] = RawSignal(runid, col, database)
-
         # tell the user about the run
         print self
 
+        print "Loading the raw signals from the database."
+        for col in rawDataCols:
+            self.rawSignals[col] = RawSignal(runid, col, database)
+
+        print "Loading the bicycle and rider data."
         # load the parameters for the bicycle
         # this code will not work for other bicycle/rider combinations. it will
         # need to be updated
@@ -550,6 +557,11 @@ class Run():
         self.bikeParameters = rigid.parameters['Benchmark']
 
         if forceRecalc == True:
+            print "Computing signals from raw data."
+
+            self.calibratedSignals = {}
+            self.truncatedSignals = {}
+
             # calibrate the signals for the run
             for sig in self.rawSignals.values():
                 calibSig = sig.scale()
@@ -570,6 +582,7 @@ class Run():
             noChange = ['FiveVolts',
                         'PushButton',
                         'RearWheelRate',
+                        'RollAngle',
                         'SteerAngle',
                         'ThreeVolts']
             for sig in noChange:
@@ -580,13 +593,6 @@ class Run():
             pullForce.name = self.truncatedSignals['PullForce'].name
             pullForce.units = self.truncatedSignals['PullForce'].units
             self.computedSignals['PullForce'] = pullForce
-
-            # this is a quick fix for the miscalibrated roll angle.
-            rollAngle  = subtract_mean(
-                    self.truncatedSignals['RollAngle']).filter(50.)
-            rollAngle.units = 'degree'
-            rollAngle.name = 'RollAngle'
-            self.computedSignals['RollAngle'] = rollAngle
 
             self.computedSignals['ForwardSpeed'] =\
                 (self.bikeParameters['rR'].nominal_value *
@@ -630,6 +636,7 @@ class Run():
             self.computedSignals['SteerTorque'] = steerTorque
         else:
             # else just get the values stored in the database
+            print "Loading computed signals from database."
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
 
