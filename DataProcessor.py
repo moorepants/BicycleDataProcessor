@@ -11,10 +11,10 @@ from math import pi
 # dependencies
 import tables as tab
 import numpy as np
-import scipy as sp
 from scipy.stats import nanmean, nanmedian
 from scipy.optimize import fmin
 from scipy.interpolate import UnivariateSpline
+from scipy import io
 import matplotlib.pyplot as plt
 
 # local dependencies
@@ -560,7 +560,7 @@ class Run():
         rigid = bp.Bicycle(bicycles[self.metadata['Bicycle']], pathToBicycles=pathToBicycles)
         pathToRider = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleParameters/data/riders'
         rigid.add_rider(pathToRider=pathToRider + '/Jason/JasonRigidBenchmark.txt')
-        self.bikeParameters = rigid.parameters['Benchmark']
+        self.bikeParameters = bp.remove_uncertainties(rigid.parameters['Benchmark'])
 
         if forceRecalc == True:
             print "Computing signals from raw data."
@@ -592,16 +592,21 @@ class Run():
                         'SteerAngle',
                         'ThreeVolts']
             for sig in noChange:
-                self.computedSignals[sig] = self.truncatedSignals[sig]
+                if sig in ['RollAngle', 'SteerAngle']:
+                    self.computedSignals[sig] =\
+                    self.truncatedSignals[sig].convert_units('radian')
+                else:
+                    self.computedSignals[sig] = self.truncatedSignals[sig]
 
-            # the pull force was always from the left side, so far
+            # the pull force was always from the left side, so far...
             pullForce = -self.truncatedSignals['PullForce']
             pullForce.name = self.truncatedSignals['PullForce'].name
             pullForce.units = self.truncatedSignals['PullForce'].units
-            self.computedSignals['PullForce'] = pullForce
+            self.computedSignals['PullForce'] =\
+            pullForce.convert_units('newton')
 
             self.computedSignals['ForwardSpeed'] =\
-                (self.bikeParameters['rR'].nominal_value *
+                (self.bikeParameters['rR'] *
                 self.truncatedSignals['RearWheelRate'])
             self.computedSignals['ForwardSpeed'].units = 'meter/second'
             self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
@@ -617,7 +622,7 @@ class Run():
                     self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
                     self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
                     self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
-                    self.bikeParameters['lam'].nominal_value,
+                    self.bikeParameters['lam'],
                     rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
             yr.units = 'radian/second'
             yr.name = 'YawRate'
@@ -645,6 +650,29 @@ class Run():
             print "Loading computed signals from database."
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
+
+    def export(self, filetype):
+        """
+        Exports the computed signals to a file.
+
+        Parameters
+        ----------
+        filetype : str
+            The type of file to export the data to. Options are 'mat', 'csv',
+            and 'pickle'.
+
+        """
+
+        if filetype == 'mat':
+            exportData = {}
+            exportData.update(self.metadata)
+            exportData.update(self.computedSignals)
+            exportData.update(self.bikeParameters)
+            filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
+            io.savemat(filename, exportData)
+        else:
+            raise NotImplementedError(('{0} method is not available' +
+                                      ' yet.').format(filetype))
 
     def plot(self, *args, **kwargs):
         '''
@@ -1070,7 +1098,7 @@ def sync_error(tau, signal1, signal2, time):
 
     # interpolate between signal 1 samples to find points that correspond in
     # time to signal 2 on the shifted time
-    sig1OnInterval = sp.interp(intervalTime, time, signal1);
+    sig1OnInterval = np.interp(intervalTime, time, signal1);
 
     # truncate signal 2 to the time interval
     if tau > 0:
