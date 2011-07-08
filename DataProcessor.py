@@ -383,14 +383,20 @@ class RawSignal(Signal):
                     intercept)
 
             if self.calibrationType == 'interceptStar':
+                # this is for potentiometers, where the slope is ratiometric
+                # and zero degrees is always zero volts
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
                                     slope * self + intercept)
             elif self.calibrationType == 'intercept':
+                # this is the typical calibration that I use for all the
+                # sensors that I calibrate myself
                 calibratedSignal = (calibrationSupplyVoltage / self.supply *
                                     (slope * self + intercept))
             elif self.calibrationType == 'bias':
-                calibratedSignal = (calibrationSupplyVoltage / self.supply *
-                                    slope * (self - bias))
+                # this is for the accelerometers and rate gyros that are
+                # "ratiometric", but I'm still not sure this is correct
+                calibratedSignal = (slope * (self - self.supply /
+                                    calibrationSupplyVoltage * bias))
             else:
                 raise StandardError("None of the calibration equations worked.")
             calibratedSignal.name = calibData['signal']
@@ -678,6 +684,8 @@ class Run():
                   ', Maneuver: ' + self.metadata['Maneuver'] +
                   ', Environment: ' + self.metadata['Environment'] + '\n' +
                   'Notes: ' + self.metadata['Notes'])
+
+        plt.xlabel('Time [second]')
 
         plt.grid()
 
