@@ -1,5 +1,21 @@
 import DataProcessor as dp
+import numpy.testing as npt
 import numpy as np
+
+def test_Signal():
+    metadata = {'name': 'RollAngle',
+                'runid': '00104',
+                'sampleRate': 200.,
+                'source': 'NI',
+                'units': 'degree'}
+    signalArray = np.ones(5)
+    rollAngle = dp.Signal(signalArray, metadata)
+    assert rollAngle.name == metadata['name']
+    assert rollAngle.runid == metadata['runid']
+    assert rollAngle.sampleRate == metadata['sampleRate']
+    assert rollAngle.source == metadata['source']
+    assert rollAngle.units == metadata['units']
+    npt.assert_array_equal(signalArray, rollAngle)
 
 def test_unsize_vector():
     n = 3

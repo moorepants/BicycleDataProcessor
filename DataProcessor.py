@@ -22,7 +22,49 @@ from dtk.process import *
 from bicycleparameters import bicycleparameters as bp
 
 class Signal(np.ndarray):
-    '''A class for collecting the data for a single signal in a run.'''
+    """
+    A subclass of ndarray for collecting the data for a single signal in a run.
+
+    Attributes
+    ----------
+    conversions : dictionary
+        A mapping for unit conversions.
+    name : str
+        The name of the signal. Should be CamelCase.
+    runid : str
+        A five digit identification number associated with the
+        trial this signal was collected from (e.g. '00104').
+    sampleRate : float
+        The sample rate in hertz of the signal.
+    source : str
+        The source of the data. This should be 'NI' for the
+        National Instruments USB-6218 and 'VN' for the VN-100 IMU.
+    units : str
+        The physcial units of the signal. These should be specified
+        as lowercase complete words using only multiplication and
+        division symbols (e.g. 'meter/second/second').
+        Signal.conversions will show the avialable options.
+
+    Methods
+    -------
+    plot()
+        Plot's the signal versus time and returns the line.
+    frequency()
+        Returns the frequency spectrum of the signal.
+    time_derivative()
+        Returns the time derivative of the signal.
+    filter(frequency)
+        Returns the low passed filter of the signal.
+    truncate(tau)
+        Interpolates and truncates the signal the based on the time shift,
+        `tau`, and the signal source.
+    as_dictionary
+        Returns a dictionary of the metadata of the signal.
+    convert_units(units)
+        Returns a signal with different units. `conversions` specifies the
+        available options.
+
+    """
 
     # define some basic unit converions
     conversions = {'degree->radian': pi / 180.,
@@ -30,14 +72,46 @@ class Signal(np.ndarray):
                    'pound->newton': 4.44822162,
                    'degree/second->radian/second': pi / 180.,
                    'feet/second->meter/second': 12. * 2.54 / 100.,
-                   'mile/hour->meter/second': 0.00254 * 12 / 5280. / 3600.}
+                   'mile/hour->meter/second': 0.00254 * 12. / 5280. / 3600.,
+                   'degree/second/second->radian/second/second': pi / 180.}
 
     def __new__(cls, inputArray, metadata):
-        '''Returns an instance of the Signal class with the addition signal
-        data.'''
+        """
+        Returns an instance of the Signal class with the addition signal
+        data.
+
+        Parameters
+        ----------
+        inputArray : ndarray, shape(n,)
+            A one dimension array representing a single variable's time
+            history.
+        metadata : dictionary
+            This dictionary contains the metadata for the signal.
+                name : str
+                    The name of the signal. Should be CamelCase.
+                runid : str
+                    A five digit identification number associated with the
+                    trial this experiment was collected at (e.g. '00104').
+                sampleRate : float
+                    The sample rate in hertz of the signal.
+                source : str
+                    The source of the data. This should be 'NI' for the
+                    National Instruments USB-6218 and 'VN' for the VN-100 IMU.
+                units : str
+                    The physcial units of the signal. These should be specified
+                    as lowercase complete words using only multiplication and
+                    division symbols (e.g. 'meter/second/second').
+                    Signal.conversions will show the avialable options.
+
+        Raises
+        ------
+        ValueError
+            If `inputArray` is not a vector.
+
+        """
         if len(inputArray.shape) > 1:
             raise ValueError('Signals must be arrays of one dimension.')
-        # cast the input array into my subclass of ndarray
+        # cast the input array into the Signal class
         obj = np.asarray(inputArray).view(cls)
         # add the metadata to the object
         obj.name = metadata['name']
@@ -57,42 +131,51 @@ class Signal(np.ndarray):
 
     def __array_wrap__(self, outputArray, context=None):
         # doesn't support these things in basic ufunc calls...maybe one day
+        # That means anytime you add, subtract, multiply, divide, etc, the
+        # following are not retained.
         outputArray.name = None
         outputArray.source = None
         outputArray.units = None
         return np.ndarray.__array_wrap__(self, outputArray, context)
 
-    def plot(self):
-        '''Plots and returns the time signal versus time.'''
-        time = time_vector(len(self), self.sampleRate)
+    def plot(self, show=True):
+        '''Plots and returns the signal versus time.'''
+        time = self.time()
         line = plt.plot(time, self)
         plt.xlabel('Time [second]')
-        plt.ylabel(self.name + ' [' + self.units + ']')
-        plt.title('Signal plot during run {0}'.format(self.name))
-        plt.show()
+        plt.ylabel('{0} [{1}]').format(self.name, self.units)
+        plt.title('Signal plot during run {0}'.format(self.runid))
+        if show:
+            plt.show()
         return line
 
     def frequency(self):
         '''Returns the frequency content of the signal.'''
-        raise NotImplementedError('This is a place holder.')
+        return freq_spectrum(self, self.sampleRate)
 
     def time_derivative(self):
         '''Returns the time derivative of the signal.'''
-        time = time_vector(len(self), self.sampleRate)
+        time = self.time()
+        # caluculate the numerical time derivative
         dsdt = derivative(time, self, method='combination')
+        # map the metadeta from self onto the derivative
         dsdt = Signal(dsdt, self.as_dictionary())
         dsdt.name = dsdt.name + 'Dot'
         dsdt.units = dsdt.units + '/second'
         return dsdt
 
+    def time(self):
+        """Returns the time vector of the signal."""
+        return time_vector(len(self), self.sampleRate)
+
     def filter(self, frequency):
-        '''Returns the low pass Butterworth filtered signal at the specifited
+        '''Returns the signal filter by a low pass Butterworth at the given
         frequency.'''
 
-        # if the signal has nans, then we need to spline fit the data before
-        # filtering it
+        # If the signal has nans, then we need to spline fit the data before
+        # filtering it. A masked numpy array may be a better option.
         if np.isnan(self).any():
-            time = time_vector(len(self), self.sampleRate)
+            time = self.time()
             # remove the nan's in the signal and the time
             t = time[np.nonzero(np.isnan(self) == False)]
             v = self[np.nonzero(np.isnan(self) == False)]
@@ -113,7 +196,7 @@ class Signal(np.ndarray):
         return truncate_data(self, tau)
 
     def as_dictionary(self):
-        '''Returns the signal data as a dictionary.'''
+        '''Returns the signal metadata as a dictionary.'''
         data = {'runid': self.runid,
                 'name': self.name,
                 'units': self.units,
@@ -122,7 +205,21 @@ class Signal(np.ndarray):
         return data
 
     def convert_units(self, units):
-        '''Returns a signal with different units and proper scaling.'''
+        """
+        Returns a signal with the specified units.
+
+        Parameters
+        ----------
+        units : str
+            The units to convert the signal to. The mapping must be in the
+            attribute `conversions`.
+
+        Returns
+        -------
+        newSig : Signal
+            The signal with the desired units.
+
+        """
         try:
             conversion = self.units + '->' + units
             newSig = self * self.conversions[conversion]
@@ -139,9 +236,43 @@ class Signal(np.ndarray):
         return newSig
 
 class RawSignal(Signal):
-    '''A class for collecting the data for a single raw signal in a run.'''
+    """
+    A subclass of Signal for collecting the data for a single raw signal in
+    a run.
+
+    Attributes
+    ----------
+    sensor : Sensor
+        Each raw signal has a sensor associated with it. Most sensors contain
+        calibration data for that sensor/signal.
+    calibrationType :
+
+    Notes
+    -----
+    This is a class for the signals that are the raw measurement outputs
+    collected by the BicycleDAQ software and are already stored in the pytables
+    database file.
+
+    """
 
     def __new__(cls, runid, signalName, database):
+        """
+        Returns an instance of the RawSignal class with the additional signal
+        metadata.
+
+        Parameters
+        ----------
+        runid : str
+            A five digit
+        signalName : str
+            A CamelCase signal name that corresponds to the raw signals output
+            by BicycleDAQ_.
+        database : pytables object
+            The hdf5 database for the instrumented bicycle.
+
+        .. _BicycleDAQ: https://github.com/moorepants/BicycleDAQ
+
+        """
 
         # get the tables
         dTab = database.root.data.datatable
@@ -215,7 +346,8 @@ class RawSignal(Signal):
         return np.ndarray.__array_wrap__(self, outputArray, context)
 
     def scale(self):
-        '''Returns the scaled signal based on the calibration data for the
+        """
+        Returns the scaled signal based on the calibration data for the
         supplied date.
 
         Returns
@@ -223,7 +355,7 @@ class RawSignal(Signal):
         : ndarray (n,)
             Scaled signal.
 
-        '''
+        """
         # these will need to be changed once we start measuring them
         doNotScale = ['LeanPotentiometer',
                       'HipPotentiometer',
@@ -239,18 +371,7 @@ class RawSignal(Signal):
         else:
             print "Scaling {0}".format(self.name)
             # pick the largest calibration date without surpassing the run date
-            runDate = self.timeStamp
-            # make a list of calibration ids and time stamps
-            dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
-                           for k, v in self.sensor.data.iteritems()]
-            # sort the pairs with the most recent date first
-            dateIdPairs.sort(key=lambda x: x[1], reverse=True)
-            # go through the list and return the index at which the calibration
-            # date is larger than the run date
-            for i, pair in enumerate(dateIdPairs):
-                if pair[1] > runDate:
-                    break
-            calibData = self.sensor.data[dateIdPairs[i][0]]
+            calibData = self.sensor.get_data_for_date(self.timeStamp)
 
             slope = calibData['slope']
             bias = calibData['bias']
@@ -274,23 +395,25 @@ class RawSignal(Signal):
 
             return calibratedSignal.view(Signal)
 
-    def plot_scaled(self):
-        '''Plots and returns the time series versus time.'''
-        time = time_vector(self.numberOfSamples, self.sampleRate)
+    def plot_scaled(self, show=True):
+        '''Plots and returns the scaled signal versus time.'''
+        time = self.time()
         scaled = self.scale()
         line = plt.plot(time, scaled[1])
         plt.xlabel('Time [s]')
         plt.ylabel(scaled[2])
         plt.title('{0} signal during run {1}'.format(scaled[0],
                   str(self.runid)))
-        plt.show()
+        if show:
+            plt.show()
         return line
 
 class Sensor():
-    '''This class is a container for calibration data for a sensor.'''
+    """This class is a container for calibration data for a sensor."""
 
     def __init__(self, name, calibrationTable):
-        '''Initializes this sensor class.
+        """
+        Initializes this sensor class.
 
         Parameters
         ----------
@@ -300,14 +423,22 @@ class Sensor():
             This is the calibration data table that contains all the data taken
             during calibrations.
 
-        '''
+        """
         self.name = name
         self.store_calibration_data(calibrationTable)
 
     def store_calibration_data(self, calibrationTable):
-        '''Stores a dictionary of calibration data for the sensor for all
-        calibration dates.'''
+        """
+        Stores a dictionary of calibration data for the sensor for all
+        calibration dates in the object.
 
+        Parameters
+        ----------
+        calibrationTable : pyTables table object
+            This is the calibration data table that contains all the data taken
+            during calibrations.
+
+        """
         self.data = {}
 
         for row in calibrationTable.iterrows():
@@ -315,9 +446,47 @@ class Sensor():
                 self.data[row['calibrationID']] = {}
                 for col in calibrationTable.colnames:
                     self.data[row['calibrationID']][col] = row[col]
+
         if self.data == {}:
             raise KeyError(('{0} is not a valid sensor ' +
                            'name').format(self.name))
+
+    def get_data_for_date(self, runDate):
+        """
+        Returns the calibration data for the sensor for the most recent
+        calibration relative to `runDate`.
+
+        Parameters
+        ----------
+        runDate : datetime object
+            This is the date of the run that the calibration data is needed
+            for.
+
+        Returns
+        -------
+        calibData : dictionary
+            A dictionary containing the sensor calibration data for the
+            calibration closest to but not past `runDate`.
+
+
+        Notes
+        -----
+        This method will select the calibration data for the date closest to
+        but not past `runDate`. **All calibrations must be taken before the
+        runs.**
+
+        """
+        # make a list of calibration ids and time stamps
+        dateIdPairs = [(k, matlab_date_to_object(v['timeStamp']))
+                       for k, v in self.data.iteritems()]
+        # sort the pairs with the most recent date first
+        dateIdPairs.sort(key=lambda x: x[1], reverse=True)
+        # go through the list and return the index at which the calibration
+        # date is larger than the run date
+        for i, pair in enumerate(dateIdPairs):
+            if runDate >= pair[1]:
+                break
+        return self.data[dateIdPairs[i][0]]
 
 class Run():
     '''The fundamental class for a run.'''
