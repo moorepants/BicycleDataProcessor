@@ -2,6 +2,7 @@
 
 # dependencies
 from scipy.interpolate import UnivariateSpline
+from scipy.optimize import fmin
 
 # local dependencies
 from signalprocessing import *
@@ -331,8 +332,6 @@ def truncate_data(signal, tau):
 
     if signal.source == 'NI':
         truncated = np.interp(tcom, tni, signal)
-        # this is now an ndarray instead of a Signal
-        truncated = Signal(truncated, signal.as_dictionary())
     elif signal.source == 'VN':
         truncated = signal[np.nonzero(tvn <= tcom[-1])]
     else:

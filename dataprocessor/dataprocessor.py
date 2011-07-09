@@ -7,8 +7,9 @@ import datetime
 from math import pi
 
 # dependencies
-from scipy.interpolate import UnivariateSpline
+import numpy as np
 from scipy import io
+from scipy.interpolate import UnivariateSpline
 import matplotlib.pyplot as plt
 
 # local dependencies
@@ -189,7 +190,8 @@ class Signal(np.ndarray):
     def truncate(self, tau):
         '''Returns the shifted and truncated signal based on the provided
         timeshift, tau.'''
-        return truncate_data(self, tau)
+        # this is now an ndarray instead of a Signal
+        return Signal(truncate_data(self, tau), self.as_dictionary())
 
     def as_dictionary(self):
         '''Returns the signal metadata as a dictionary.'''
@@ -590,9 +592,10 @@ class Run():
             for sig in noChange:
                 if sig in ['RollAngle', 'SteerAngle']:
                     self.computedSignals[sig] =\
-                    self.truncatedSignals[sig].convert_units('radian')
+                    self.truncatedSignals[sig].convert_units('radian').filter(50.)
                 else:
                     self.computedSignals[sig] = self.truncatedSignals[sig]
+
 
             # the pull force was always from the left side, so far...
             pullForce = -self.truncatedSignals['PullForce']
@@ -607,12 +610,14 @@ class Run():
             self.computedSignals['ForwardSpeed'].units = 'meter/second'
             self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
 
-            self.computedSignals['SteerRate'] =\
+            steerRate =\
                 steer_rate(self.truncatedSignals['ForkRate'],
                 self.truncatedSignals['AngularRateZ'].\
                         convert_units('radian/second'))
-            self.computedSignals['SteerRate'].units = 'radian/second'
-            self.computedSignals['SteerRate'].name = 'SteerRate'
+            steerRate.filter(50.)
+            steerRate.units = 'radian/second'
+            steerRate.name = 'SteerRate'
+            self.computedSignals['SteerRate'] = steerRate
 
             yr, rr, pr = yaw_roll_pitch_rate(
                     self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
@@ -620,10 +625,13 @@ class Run():
                     self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
                     self.bikeParameters['lam'],
                     rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
+            yr = yr.filter(50.)
             yr.units = 'radian/second'
             yr.name = 'YawRate'
+            rr = rr.filter(50.)
             rr.units = 'radian/second'
             rr.name = 'RollRate'
+            pr = pr.filter(50.)
             pr.units = 'radian/second'
             pr.name = 'PitchRate'
 
@@ -638,6 +646,7 @@ class Run():
                 rigid.steer_assembly_moment_of_inertia(fork=False,
                     wheel=False).nominal_value,
                 0.3475, 0.0861)
+            steerTorque = steerTorque.filter(50.)
             steerTorque.units = 'newton*meter'
             steerTorque.name = 'SteerTorque'
             self.computedSignals['SteerTorque'] = steerTorque

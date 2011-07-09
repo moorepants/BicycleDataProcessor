@@ -6,6 +6,7 @@ import re
 from operator import xor
 
 # dependencies
+import numpy as np
 import tables as tab
 
 def get_cell(datatable, colname, rownum):
