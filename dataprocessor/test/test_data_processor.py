@@ -1,4 +1,4 @@
-import DataProcessor as dp
+import dataprocessor.dataprocessor as dp
 import numpy.testing as npt
 import numpy as np
 
