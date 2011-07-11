@@ -248,9 +248,9 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
                  'AccelerationX': 'meter/second/second',
                  'AccelerationY': 'meter/second/second',
                  'AccelerationZ': 'meter/second/second',
-                 'AngularRateX': 'degree/second',
-                 'AngularRateY': 'degree/second',
-                 'AngularRateZ': 'degree/second',
+                 'AngularRateX': 'radian/second',
+                 'AngularRateY': 'radian/second',
+                 'AngularRateZ': 'radian/second',
                  'AngularRotationX': 'degree',
                  'AngularRotationY': 'degree',
                  'AngularRotationZ': 'degree',
@@ -314,6 +314,143 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     data.close()
 
     print datafile, "ready for action!"
+
+def replace_corrupt_strings_with_nan(vnOutput, vnCols):
+    '''Returns a numpy matrix with the VN-100 output that has the corrupt
+    values replaced by nan values.
+
+    Parameters
+    ----------
+    vnOutput : list
+        The list of output strings from an asyncronous reading from the VN-100.
+    vnCols : list
+        A list of the column names for this particular async output.
+
+    Returns
+    -------
+    vnData : array (m, n)
+        An array containing the corrected data values. n is the number of
+        samples and m is the number of signals.
+
+    '''
+
+    vnData = []
+
+    nanRow = [np.nan for i in range(len(vnCols))]
+
+    # go through each sample in the vn-100 output
+    for i, vnStr in enumerate(vnOutput):
+        # parse the string
+        vnList, chkPass, vnrrg = parse_vnav_string(vnStr)
+        # if the checksum passed, then append the data unless vnList is not the
+        # correct length, (this is because run139 sample 4681 seems to calculate the correct
+        # checksum for an incorrect value)
+        if chkPass and len(vnList[1:-1]) == len(vnCols):
+            vnData.append([float(x) for x in vnList[1:-1]])
+        # if not append some nan values
+        else:
+            if i == 0:
+                vnData.append(nanRow)
+            # there are typically at least two corrupted samples combine into
+            # one
+            else:
+                vnData.append(nanRow)
+                vnData.append(nanRow)
+
+    # remove extra values so that the number of samples equals the number of
+    # samples of the VN-100 output
+    vnData = vnData[:len(vnOutput)]
+
+    return np.transpose(np.array(vnData))
+
+def parse_vnav_string(vnStr):
+    '''Returns a list of the information in a VN-100 text string and whether
+    the checksum failed.
+
+    Parameters
+    ----------
+    vnStr : string
+        A string from the VectorNav serial output (UART mode).
+
+    Returns
+    -------
+    vnlist : list
+        A list of each element in the VectorNav string.
+        ['VNWRG', '26', ..., ..., ..., checksum]
+    chkPass : boolean
+        True if the checksum is correct and false if it isn't.
+    vnrrg : boolean
+        True if the str is a register reading, false if it is an async
+        reading, and None if chkPass is false.
+
+    '''
+    # calculate the checksum of the raw string
+    calcChkSum = vnav_checksum(vnStr)
+    #print('Checksum for the raw string is %s' % calcChkSum)
+
+    # get rid of the $ and the newline characters
+    vnMeat = re.sub('''(?x) # verbose
+                       \$ # match the dollar sign at the beginning
+                       (.*) # this is the content
+                       \* # match the asterisk
+                       (\w*) # the checksum
+                       \s* # the newline characters''', r'\1,\2', vnStr)
+
+    # make it a list with the last item being the checksum
+    vnList = vnMeat.split(',')
+
+    # set the vnrrg flag
+    if vnList[0] == 'VNRRG':
+        vnrrg = True
+    else:
+        vnrrg = False
+
+    #print("Provided checksum is %s" % vnList[-1])
+    # see if the checksum passes
+    chkPass = calcChkSum == vnList[-1]
+    if not chkPass:
+        #print "Checksum failed"
+        #print vnStr
+        vnrrg = None
+
+    # return the list, whether or not the checksum failed and whether or not it
+    # is a VNRRG
+    return vnList, chkPass, vnrrg
+
+def vnav_checksum(vnStr):
+    '''
+    Returns the checksum in hex for the VN-100 string.
+
+    Parameters
+    ----------
+    vnStr : string
+        Of the form '$...*X' where X is the two digit checksum.
+
+    Returns
+    -------
+    chkSum : string
+        Two character hex representation of the checksum. The letters are
+        capitalized and single digits have a leading zero.
+
+    '''
+    chkStr = re.sub('''(?x) # verbose
+                       \$ # match the dollar sign
+                       (.*) # match the stuff the checksum is calculated from
+                       \* # match the asterisk
+                       \w* # the checksum
+                       \s* # the newline characters''', r'\1', vnStr)
+
+    checksum = reduce(xor, map(ord, chkStr))
+    # remove the first '0x'
+    hexVal = hex(checksum)[2:]
+
+    # if the hexVal is only a single digit, it needs a leading zero to match
+    # the VN-100's output
+    if len(hexVal) == 1:
+        hexVal = '0' + hexVal
+
+    # the letter's need to be capitalized to match too
+    return hexVal.upper()
 
 def get_two_runs(pathToH5):
     '''Gets the data from both a filtered and unfiltered run.'''

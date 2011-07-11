@@ -65,16 +65,16 @@ class Signal(np.ndarray):
 
     # define some basic unit converions
     conversions = {'degree->radian': pi / 180.,
+                   'degree/second->radian/second': pi / 180.,
+                   'degree/second/second->radian/second/second': pi / 180.,
                    'inch*pound->newton*meter': 25.4 / 1000. * 4.44822162,
                    'pound->newton': 4.44822162,
-                   'degree/second->radian/second': pi / 180.,
                    'feet/second->meter/second': 12. * 2.54 / 100.,
-                   'mile/hour->meter/second': 0.00254 * 12. / 5280. / 3600.,
-                   'degree/second/second->radian/second/second': pi / 180.}
+                   'mile/hour->meter/second': 0.00254 * 12. / 5280. / 3600.}
 
     def __new__(cls, inputArray, metadata):
         """
-        Returns an instance of the Signal class with the addition signal
+        Returns an instance of the Signal class with the additional signal
         data.
 
         Parameters
@@ -135,64 +135,6 @@ class Signal(np.ndarray):
         outputArray.units = None
         return np.ndarray.__array_wrap__(self, outputArray, context)
 
-    def plot(self, show=True):
-        '''Plots and returns the signal versus time.'''
-        time = self.time()
-        line = plt.plot(time, self)
-        plt.xlabel('Time [second]')
-        plt.ylabel('{0} [{1}]').format(self.name, self.units)
-        plt.title('Signal plot during run {0}'.format(self.runid))
-        if show:
-            plt.show()
-        return line
-
-    def frequency(self):
-        '''Returns the frequency content of the signal.'''
-        return freq_spectrum(self, self.sampleRate)
-
-    def time_derivative(self):
-        '''Returns the time derivative of the signal.'''
-        time = self.time()
-        # caluculate the numerical time derivative
-        dsdt = derivative(time, self, method='combination')
-        # map the metadeta from self onto the derivative
-        dsdt = Signal(dsdt, self.as_dictionary())
-        dsdt.name = dsdt.name + 'Dot'
-        dsdt.units = dsdt.units + '/second'
-        return dsdt
-
-    def time(self):
-        """Returns the time vector of the signal."""
-        return time_vector(len(self), self.sampleRate)
-
-    def filter(self, frequency):
-        '''Returns the signal filter by a low pass Butterworth at the given
-        frequency.'''
-
-        # If the signal has nans, then we need to spline fit the data before
-        # filtering it. A masked numpy array may be a better option.
-        if np.isnan(self).any():
-            time = self.time()
-            # remove the nan's in the signal and the time
-            t = time[np.nonzero(np.isnan(self) == False)]
-            v = self[np.nonzero(np.isnan(self) == False)]
-            # fit a spline through the data
-            splineObject = UnivariateSpline(t, v, k=3, s=0)
-            # get the data from the spline function for time
-            splined = splineObject(time)
-        else:
-            splined = self
-
-        filteredArray = butterworth(splined, frequency, self.sampleRate)
-
-        return Signal(filteredArray, self.as_dictionary())
-
-    def truncate(self, tau):
-        '''Returns the shifted and truncated signal based on the provided
-        timeshift, tau.'''
-        # this is now an ndarray instead of a Signal
-        return Signal(truncate_data(self, tau), self.as_dictionary())
-
     def as_dictionary(self):
         '''Returns the signal metadata as a dictionary.'''
         data = {'runid': self.runid,
@@ -218,20 +160,74 @@ class Signal(np.ndarray):
             The signal with the desired units.
 
         """
-        try:
-            conversion = self.units + '->' + units
-            newSig = self * self.conversions[conversion]
-        except KeyError:
+        if units == self.units:
+            return self
+        else:
             try:
-                conversion = units + '->' + self.units
-                newSig = self / self.conversions[conversion]
+                conversion = self.units + '->' + units
+                newSig = self * self.conversions[conversion]
             except KeyError:
-                raise KeyError(('Conversion from {0} to {1} is not ' +
-                    'possible or not defined.').format(self.units, units))
-        # make the new signal
-        newSig.units = units
+                try:
+                    conversion = units + '->' + self.units
+                    newSig = self / self.conversions[conversion]
+                except KeyError:
+                    raise KeyError(('Conversion from {0} to {1} is not ' +
+                        'possible or not defined.').format(self.units, units))
+            # make the new signal
+            newSig.units = units
 
-        return newSig
+            return newSig
+
+    def frequency(self):
+        """Returns the frequency content of the signal."""
+
+        return freq_spectrum(self.spline(), self.sampleRate)
+
+    def plot(self, show=True):
+        """Plots and returns the signal versus time."""
+
+        time = self.time()
+        line = plt.plot(time, self)
+        if show:
+            plt.xlabel('Time [second]')
+            plt.ylabel('{0} [{1}]').format(self.name, self.units)
+            plt.title('Signal plot during run {0}'.format(self.runid))
+            plt.show()
+        return line
+
+    def spline(self):
+        """Returns the signal with nans fixed by a cubic spline."""
+
+        splined = spline_over_nan(self.time(), self)
+        return Signal(splined, self.as_dictionary())
+
+    def filter(self, frequency):
+        """Returns the signal filtered by a low pass Butterworth at the given
+        frequency."""
+
+        filteredArray = butterworth(self.spline(), frequency, self.sampleRate)
+        return Signal(filteredArray, self.as_dictionary())
+
+    def time(self):
+        """Returns the time vector of the signal."""
+        return time_vector(len(self), self.sampleRate)
+
+    def time_derivative(self):
+        """Returns the time derivative of the signal."""
+
+        # caluculate the numerical time derivative
+        dsdt = derivative(self.time(), self, method='combination')
+        # map the metadeta from self onto the derivative
+        dsdt = Signal(dsdt, self.as_dictionary())
+        #dsdt.name = dsdt.name + 'Dot'
+        #dsdt.units = dsdt.units + '/second'
+        return dsdt
+
+    def truncate(self, tau):
+        '''Returns the shifted and truncated signal based on the provided
+        timeshift, tau.'''
+        # this is now an ndarray instead of a Signal
+        return Signal(truncate_data(self, tau), self.as_dictionary())
 
 class RawSignal(Signal):
     """
@@ -612,17 +608,16 @@ class Run():
 
             steerRate =\
                 steer_rate(self.truncatedSignals['ForkRate'],
-                self.truncatedSignals['AngularRateZ'].\
-                        convert_units('radian/second'))
+                self.truncatedSignals['AngularRateZ'])
             steerRate.filter(50.)
             steerRate.units = 'radian/second'
             steerRate.name = 'SteerRate'
             self.computedSignals['SteerRate'] = steerRate
 
             yr, rr, pr = yaw_roll_pitch_rate(
-                    self.truncatedSignals['AngularRateX'].convert_units('radian/second'),
-                    self.truncatedSignals['AngularRateY'].convert_units('radian/second'),
-                    self.truncatedSignals['AngularRateZ'].convert_units('radian/second'),
+                    self.truncatedSignals['AngularRateX'],
+                    self.truncatedSignals['AngularRateY'],
+                    self.truncatedSignals['AngularRateZ'],
                     self.bikeParameters['lam'],
                     rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
             yr = yr.filter(50.)
@@ -656,6 +651,27 @@ class Run():
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
 
+    def __str__(self):
+        '''Prints basic run information to the screen.'''
+
+        line = "=" * 79
+        info = '''Run # {0}
+Environment: {1}
+Rider: {2}
+Bicycle: {3}
+Speed: {4}
+Maneuver: {5}
+Notes: {6}'''.format(
+        self.metadata['RunID'],
+        self.metadata['Environment'],
+        self.metadata['Rider'],
+        self.metadata['Bicycle'],
+        self.metadata['Speed'],
+        self.metadata['Maneuver'],
+        self.metadata['Notes'])
+
+        return line + '\n' + info + '\n' + line
+    
     def export(self, filetype):
         """
         Exports the computed signals to a file.
@@ -740,29 +756,8 @@ class Run():
         else:
             print "No video for this run"
 
-    def __str__(self):
-        '''Prints basic run information to the screen.'''
-
-        line = "=" * 79
-        info = '''Run # {0}
-Environment: {1}
-Rider: {2}
-Bicycle: {3}
-Speed: {4}
-Maneuver: {5}
-Notes: {6}'''.format(
-        self.metadata['RunID'],
-        self.metadata['Environment'],
-        self.metadata['Rider'],
-        self.metadata['Bicycle'],
-        self.metadata['Speed'],
-        self.metadata['Maneuver'],
-        self.metadata['Notes'])
-
-        return line + '\n' + info + '\n' + line
-
 def matlab_date_to_object(matDate):
-    '''Returns a date time object based on a Matlab datestr() output.
+    '''Returns a date time object based on a Matlab `datestr()` output.
 
     Parameters
     ----------
@@ -781,6 +776,8 @@ def pad_with_zeros(num, digits):
     Adds zeros to the front of a string needed to produce the number of
     digits.
 
+    If `digits` = 4 and `num` = '25' then the function returns '0025'.
+
     Parameters
     ----------
     num : string
@@ -788,7 +785,9 @@ def pad_with_zeros(num, digits):
     digits : integer
         The total number of digits desired.
 
-    If digits = 4 and num = '25' then the function returns '0025'.
+    Returns
+    -------
+    num : string
 
     '''
 
@@ -796,142 +795,3 @@ def pad_with_zeros(num, digits):
         num = '0' + num
 
     return num
-
-
-def replace_corrupt_strings_with_nan(vnOutput, vnCols):
-    '''Returns a numpy matrix with the VN-100 output that has the corrupt
-    values replaced by nan values.
-
-    Parameters
-    ----------
-    vnOutput : list
-        The list of output strings from an asyncronous reading from the VN-100.
-    vnCols : list
-        A list of the column names for this particular async output.
-
-    Returns
-    -------
-    vnData : array (m, n)
-        An array containing the corrected data values. n is the number of
-        samples and m is the number of signals.
-
-    '''
-
-    vnData = []
-
-    nanRow = [np.nan for i in range(len(vnCols))]
-
-    # go through each sample in the vn-100 output
-    for i, vnStr in enumerate(vnOutput):
-        # parse the string
-        vnList, chkPass, vnrrg = parse_vnav_string(vnStr)
-        # if the checksum passed, then append the data unless vnList is not the
-        # correct length, (this is because run139 sample 4681 seems to calculate the correct
-        # checksum for an incorrect value)
-        if chkPass and len(vnList[1:-1]) == len(vnCols):
-            vnData.append([float(x) for x in vnList[1:-1]])
-        # if not append some nan values
-        else:
-            if i == 0:
-                vnData.append(nanRow)
-            # there are typically at least two corrupted samples combine into
-            # one
-            else:
-                vnData.append(nanRow)
-                vnData.append(nanRow)
-
-    # remove extra values so that the number of samples equals the number of
-    # samples of the VN-100 output
-    vnData = vnData[:len(vnOutput)]
-
-    return np.transpose(np.array(vnData))
-
-def parse_vnav_string(vnStr):
-    '''Returns a list of the information in a VN-100 text string and whether
-    the checksum failed.
-
-    Parameters
-    ----------
-    vnStr : string
-        A string from the VectorNav serial output (UART mode).
-
-    Returns
-    -------
-    vnlist : list
-        A list of each element in the VectorNav string.
-        ['VNWRG', '26', ..., ..., ..., checksum]
-    chkPass : boolean
-        True if the checksum is correct and false if it isn't.
-    vnrrg : boolean
-        True if the str is a register reading, false if it is an async
-        reading, and None if chkPass is false.
-
-    '''
-    # calculate the checksum of the raw string
-    calcChkSum = vnav_checksum(vnStr)
-    #print('Checksum for the raw string is %s' % calcChkSum)
-
-    # get rid of the $ and the newline characters
-    vnMeat = re.sub('''(?x) # verbose
-                       \$ # match the dollar sign at the beginning
-                       (.*) # this is the content
-                       \* # match the asterisk
-                       (\w*) # the checksum
-                       \s* # the newline characters''', r'\1,\2', vnStr)
-
-    # make it a list with the last item being the checksum
-    vnList = vnMeat.split(',')
-
-    # set the vnrrg flag
-    if vnList[0] == 'VNRRG':
-        vnrrg = True
-    else:
-        vnrrg = False
-
-    #print("Provided checksum is %s" % vnList[-1])
-    # see if the checksum passes
-    chkPass = calcChkSum == vnList[-1]
-    if not chkPass:
-        #print "Checksum failed"
-        #print vnStr
-        vnrrg = None
-
-    # return the list, whether or not the checksum failed and whether or not it
-    # is a VNRRG
-    return vnList, chkPass, vnrrg
-
-def vnav_checksum(vnStr):
-    '''
-    Returns the checksum in hex for the VN-100 string.
-
-    Parameters
-    ----------
-    vnStr : string
-        Of the form '$...*X' where X is the two digit checksum.
-
-    Returns
-    -------
-    chkSum : string
-        Two character hex representation of the checksum. The letters are
-        capitalized and single digits have a leading zero.
-
-    '''
-    chkStr = re.sub('''(?x) # verbose
-                       \$ # match the dollar sign
-                       (.*) # match the stuff the checksum is calculated from
-                       \* # match the asterisk
-                       \w* # the checksum
-                       \s* # the newline characters''', r'\1', vnStr)
-
-    checksum = reduce(xor, map(ord, chkStr))
-    # remove the first '0x'
-    hexVal = hex(checksum)[2:]
-
-    # if the hexVal is only a single digit, it needs a leading zero to match
-    # the VN-100's output
-    if len(hexVal) == 1:
-        hexVal = '0' + hexVal
-
-    # the letter's need to be capitalized to match too
-    return hexVal.upper()
-
