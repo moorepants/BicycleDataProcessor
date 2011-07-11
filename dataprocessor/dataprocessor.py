@@ -494,7 +494,7 @@ class Sensor():
 class Run():
     """The fundamental class for a run."""
 
-    def __init__(self, runid, database, forceRecalc=False):
+    def __init__(self, runid, database, forceRecalc=False, filterSigs=False):
         """
         Loads all the data for a run if available otherwise it generates the
         data from the raw data.
@@ -507,9 +507,11 @@ class Run():
         database : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
-        forceRecalc : boolean
+        forceRecalc : boolean, optional
             If true then it will force a recalculation of all the the non raw
             data.
+        filterSigs : boolean, optional
+            If true the computed signals will be low pass filtered.
 
         """
 
@@ -592,7 +594,6 @@ class Run():
                 else:
                     self.computedSignals[sig] = self.truncatedSignals[sig]
 
-
             # the pull force was always from the left side, so far...
             pullForce = -self.truncatedSignals['PullForce']
             pullForce.name = self.truncatedSignals['PullForce'].name
@@ -645,6 +646,11 @@ class Run():
             steerTorque.units = 'newton*meter'
             steerTorque.name = 'SteerTorque'
             self.computedSignals['SteerTorque'] = steerTorque
+
+            if filterSigs:
+                # filter all the computed signals
+                for k, v in self.computedSignals.items():
+                    self.computedSignals[k] = v.filter(30.)
         else:
             # else just get the values stored in the database
             print "Loading computed signals from database."
@@ -671,8 +677,8 @@ Notes: {6}'''.format(
         self.metadata['Notes'])
 
         return line + '\n' + info + '\n' + line
-    
-    def export(self, filetype):
+
+    def export(self, filetype, directory='exports'):
         """
         Exports the computed signals to a file.
 
@@ -685,12 +691,16 @@ Notes: {6}'''.format(
         """
 
         if filetype == 'mat':
+            fullDir = os.path.join(directory, filetype)
+            if not os.path.exists(fullDir):
+                print "Creating {0}".format(fullDir)
+                os.makedirs(fullDir)
             exportData = {}
             exportData.update(self.metadata)
             exportData.update(self.computedSignals)
             exportData.update(self.bikeParameters)
             filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
-            io.savemat(filename, exportData)
+            io.savemat(os.path.join(fullDir, filename), exportData)
         else:
             raise NotImplementedError(('{0} method is not available' +
                                       ' yet.').format(filetype))
