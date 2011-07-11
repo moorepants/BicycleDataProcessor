@@ -476,7 +476,8 @@ def load_database(filename='InstrumentedBicycleData.h5', mode='r'):
     return tab.openFile(filename, mode=mode)
 
 def create_database(filename='InstrumentedBicycleData.h5',
-                    pathToH5='../BicycleDAQ/data/h5'):
+                    pathToH5='../BicycleDAQ/data/h5',
+                    compression=False):
     '''Creates an HDF5 file for data collected from the instrumented
     bicycle.'''
 
@@ -516,12 +517,18 @@ def create_database(filename='InstrumentedBicycleData.h5',
     filteredRun, unfilteredRun = get_two_runs(pathToH5)
     # generate the table description class
     RunTable = create_run_table_class(filteredRun, unfilteredRun)
-    # setup up a compression filter
-    compression = tab.Filters(complevel=1, complib='zlib')
-    # add the data table to this group
-    rtable = data.createTable(rgroup, 'datatable',
-                              RunTable, 'Run Data',
-                              filters=compression)
+    if compression:
+        # setup up a compression filter
+        fil = tab.Filters(complevel=1, complib='zlib')
+        # add the data table to this group
+        rtable = data.createTable(rgroup, 'datatable',
+                                  RunTable, 'Run Data',
+                                  filters=fil)
+    else:
+        # add the data table to this group
+        rtable = data.createTable(rgroup, 'datatable',
+                                  RunTable, 'Run Data')
+
     rtable.flush()
 
     data.close()
