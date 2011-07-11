@@ -190,7 +190,7 @@ class Signal(np.ndarray):
         line = plt.plot(time, self)
         if show:
             plt.xlabel('Time [second]')
-            plt.ylabel('{0} [{1}]').format(self.name, self.units)
+            plt.ylabel('{0} [{1}]'.format(self.name, self.units))
             plt.title('Signal plot during run {0}'.format(self.runid))
             plt.show()
         return line
