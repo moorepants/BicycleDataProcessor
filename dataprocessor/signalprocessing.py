@@ -3,6 +3,7 @@
 # dependencies
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fmin
+import matplotlib.pyplot as plt # only for testing
 
 # local dependencies
 from signalprocessing import *
@@ -216,6 +217,12 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     tau : float
         The timeshift.
 
+    Notes
+    -----
+    The Z direction for `VNacc` is assumed to be aligned with the steer axis
+    and pointing down and the Y direction for the NI accelerometer should be
+    aligned with the steer axis and pointing up.
+
     '''
     # raise an error if the signals are not the same length
     N = len(niAcc)
@@ -225,12 +232,12 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     # make a time vector
     time = time_vector(N, sampleRate)
 
-    # the signals are opposite sign of each other
+    # the signals are opposite sign of each other, so fix that
     niSig = -niAcc
     vnSig = vnAcc
 
     # some constants for find_bump
-    wheelbase = 1.02
+    wheelbase = 1.02 # this is the wheelbase of the rigid rider bike
     bumpLength = 1.
     cutoff = 50.
     # filter the NI Signal
@@ -238,7 +245,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     # find the bump in the filtered NI signal
     niBump =  find_bump(filNiSig, sampleRate, speed, wheelbase, bumpLength)
 
-    # remove the nan's in the VN signal and the time
+    # remove the nan's in the VN signal and the corresponding time
     v = vnSig[np.nonzero(np.isnan(vnSig) == False)]
     t = time[np.nonzero(np.isnan(vnSig) == False)]
     # fit a spline through the data
@@ -258,8 +265,8 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
             bSec = pair
 
     # subtract the mean and normalize both signals
-    niSig = normalize(subtract_mean(niSig))
-    vnSig = normalize(subtract_mean(vnSig))
+    niSig = normalize(subtract_mean(niSig, hasNans=True), hasNans=True)
+    vnSig = normalize(subtract_mean(vnSig, hasNans=True), hasNans=True)
 
     niBumpSec = niSig[bSec[0]:bSec[1]]
     vnBumpSec = vnSig[bSec[0]:bSec[1]]
