@@ -805,3 +805,87 @@ def pad_with_zeros(num, digits):
         num = '0' + num
 
     return num
+
+def sync_data():
+    """Sync's data to the biosport website."""
+    raise NotImplementedError
+
+def create_html_tables(database, directory='docs/tables'):
+    """Creates a table of all the basic info for the runs."""
+
+    # create the directory if it isn't already there
+    if not os.path.exists(directory):
+        print "Creating {0}".format(directory)
+        os.makedirs(directory)
+
+    # make a run table
+    dTab = database.root.data.datatable
+
+    # only write these columns
+    cols = ['DateTime',
+            'RunID',
+            'Rider',
+            'Bicycle',
+            'Maneuver',
+            'Environment',
+            'Speed',
+            'Notes']
+
+    lines = ['<table border="1">\n<tr>\n']
+
+    for col in cols:
+        lines.append("<th>" + col + "</th>\n")
+
+    lines.append("</tr>\n")
+
+    for row in dTab.iterrows():
+        lines.append("<tr>\n")
+        for cell in cols:
+            lines.append("<td>" + str(row[cell]) + "</td>\n")
+        lines.append("</tr>\n")
+
+    lines.append("</table>")
+
+    f = open(os.path.join(directory, 'RunTable.html'), 'w')
+    f.writelines(lines)
+    f.close()
+
+    sTab = database.root.data.signaltable
+    lines = ['<table border="1">\n<tr>\n']
+    for col in sTab.colnames:
+        lines.append("<th>" + col + "</th>\n")
+
+    lines.append("</tr>\n")
+
+    for row in sTab.iterrows():
+        lines.append("<tr>\n")
+        for cell in sTab.colnames:
+            lines.append("<td>" + str(row[cell]) + "</td>\n")
+        lines.append("</tr>\n")
+
+    lines.append("</table>")
+
+    f = open(os.path.join(directory, 'SignalTable.html'), 'w')
+    f.writelines(lines)
+    f.close()
+
+    cTab = database.root.data.calibrationtable
+    lines = ['<table border="1">\n<tr>\n']
+    for col in cTab.colnames:
+        if col not in ['v', 'x', 'y']:
+            lines.append("<th>" + col + "</th>\n")
+
+    lines.append("</tr>\n")
+
+    for row in cTab.iterrows():
+        lines.append("<tr>\n")
+        for cell in cTab.colnames:
+            if cell not in ['v', 'x', 'y']:
+                lines.append("<td>" + str(row[cell]) + "</td>\n")
+        lines.append("</tr>\n")
+
+    lines.append("</table>")
+
+    f = open(os.path.join(directory, 'CalibrationTable.html'), 'w')
+    f.writelines(lines)
+    f.close()

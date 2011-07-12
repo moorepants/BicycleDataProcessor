@@ -608,7 +608,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
             if isinstance(val, type(1)):
                 exec(key + " = tab.Int64Col(pos=pos)")
             elif isinstance(val, type('')):
-                exec(key + " = tab.StringCol(itemsize=200, pos=pos)")
+                exec(key + " = tab.StringCol(itemsize=300, pos=pos)")
             elif isinstance(val, type(1.)):
                 exec(key + " = tab.Float64Col(pos=pos)")
             elif isinstance(val, type(np.ones(1))):
