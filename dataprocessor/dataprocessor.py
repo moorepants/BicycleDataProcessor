@@ -806,9 +806,12 @@ def pad_with_zeros(num, digits):
 
     return num
 
-def sync_data():
+def sync_data(directory='exports/'):
     """Sync's data to the biosport website."""
-    raise NotImplementedError
+    user = 'biosport'
+    host = 'mae.ucdavis.edu'
+    remoteDir = '/home/grads/biosport/public_html/InstrumentedBicycleData/ProcessedData/'
+    os.system("rsync -avz " + directory + ' -e ssh ' + user + '@' + host + ':' + remoteDir)
 
 def create_html_tables(database, directory='docs/tables'):
     """Creates a table of all the basic info for the runs."""
