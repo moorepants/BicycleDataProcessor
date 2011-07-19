@@ -9,6 +9,245 @@ import matplotlib.pyplot as plt # only for testing
 from signalprocessing import *
 from dtk.process import *
 
+#def wheel_contact_point_rates():
+    #"""
+    #Returns the rate of motion of the rear wheel contact points of a bicycle.
+#
+    #"""
+#
+    #d1 = cos(lam) * (c+w-rR * tan(lam))
+    #d3 = -cos(lam) * (c-rF * tan(lam))
+    #d2 = -(rF-rR-sin(lam) * d1-sin(lam) * d3) / cos(lam)
+    #z[1] = cos(q3)
+    #z[2] = sin(q3)
+    #z[3] = cos(q4)
+    #z[4] = sin(q4)
+    #z[5] = cos(lam+q5)
+    #z[6] = sin(lam+q5)
+    #z[7] = cos(q6)
+    #z[8] = sin(q6)
+    #z[9] = cos(q7)
+    #z[10] = sin(q7)
+    #z[11] = cos(q8)
+    #z[12] = sin(q8)
+    #z[13] = z[5] * z[9]
+    #z[14] = z[6] * z[9]
+    #z[15] = z[5] * z[10]
+    #z[16] = z[6] * z[10]
+    #z[17] = z[2] * z[3]
+    #z[18] = z[1] * z[3]
+    #z[19] = z[2] * z[4]
+    #z[20] = z[1] * z[4]
+    #z[21] = z[1] * z[13] - z[10] * z[17] - z[14] * z[19]
+    #z[22] = z[2] * z[13] + z[10] * z[18] + z[14] * z[20]
+    #z[23] = z[4] * z[10] - z[3] * z[14]
+    #z[24] = z[16] * z[19] - z[1] * z[15] - z[9] * z[17]
+    #z[25] = z[9] * z[18] - z[2] * z[15] - z[16] * z[20]
+    #z[26] = z[3] * z[16] + z[4] * z[9]
+    #z[27] = z[1] * z[6] + z[5] * z[19]
+    #z[28] = z[2] * z[6] - z[5] * z[20]
+    #z[29] = z[3] * z[5]
+    #z[30] = 1 - pow(z[26],2)
+    #z[31] = pow(z[30],0.5)
+    #z[32] = 1 / z[31]
+    #z[33] = z[26] / z[31]
+    #z[34] = rF * z[33]
+    #z[35] = rF * z[32]
+    #z[37] = z[17] * z[20] - z[18] * z[19]
+    #z[38] = pow(z[3],2) + pow(z[19],2) + pow(z[20],2)
+    #z[40] = z[1] * z[20] + z[2] * z[19]
+    #z[41] = z[1] * z[18] + z[2] * z[17]
+    #z[45] = z[5] * z[41] + z[6] * z[37]
+    #z[48] = z[5] * z[7] - z[6] * z[8]
+    #z[49] = z[5] * z[8] + z[6] * z[7]
+    #z[50] = -z[5] * z[8] - z[6] * z[7]
+    #z[51] = z[37] * z[48] + z[41] * z[50]
+    #z[52] = z[38] * z[48]
+    #z[53] = z[37] * z[49] + z[41] * z[48]
+    #z[54] = z[38] * z[49]
+    #z[55] = -z[2] * z[13] - z[10] * z[18] - z[14] * z[20]
+    #z[56] = -z[1] * z[14] - z[13] * z[19]
+    #z[57] = z[10] * z[19] - z[14] * z[17]
+    #z[58] = z[14] * z[18] - z[10] * z[20]
+    #z[59] = z[13] * z[20] - z[2] * z[14]
+    #z[60] = z[3] * z[10] + z[4] * z[14]
+    #z[61] = z[3] * z[13]
+    #z[62] = z[2] * z[15] + z[16] * z[20] - z[9] * z[18]
+    #z[63] = z[10] * z[17] + z[14] * z[19] - z[1] * z[13]
+    #z[64] = z[9] * z[19] + z[16] * z[17]
+    #z[66] = -z[9] * z[20] - z[16] * z[18]
+    #z[68] = z[3] * z[9] - z[4] * z[16]
+    #z[69] = z[3] * z[14] - z[4] * z[10]
+    #z[70] = z[3] * z[15]
+    #z[71] = z[1] * z[5] - z[6] * z[19]
+    #z[72] = z[5] * z[17]
+    #z[73] = z[5] * z[20] - z[2] * z[6]
+    #z[74] = z[2] * z[5] + z[6] * z[20]
+    #z[75] = z[5] * z[18]
+    #z[76] = z[4] * z[5]
+    #z[77] = z[3] * z[6]
+    #z[78] = z[24] * z[28] + z[27] * z[62]
+    #z[80] = z[27] * z[64] + z[28] * z[66] + z[29] * z[68]
+    #z[83] = z[21] * z[72] - z[22] * z[75] - z[23] * z[76]
+    #z[84] = z[21] * z[73] + z[22] * z[27]
+    #z[85] = z[21] * z[25] + z[24] * z[55]
+    #z[87] = z[24] * z[57] + z[25] * z[58] + z[26] * z[60]
+    #z[89] = pow(z[11],2) + pow(z[12],2)
+    #z[90] = z[11] * z[78] - z[12] * z[85]
+    #z[94] = z[11] * z[85] + z[12] * z[78]
+    #z[92] = z[11] * z[80] - z[12] * z[87]
+    #z[96] = z[11] * z[87] + z[12] * z[80]
+    #z[82] = z[21] * z[71] + z[22] * z[74] - z[23] * z[77]
+    #z[65] = z[1] * z[16] + z[15] * z[19]
+    #z[67] = z[2] * z[16] - z[15] * z[20]
+    #z[81] = z[27] * z[65] + z[28] * z[67] + z[29] * z[70]
+    #z[86] = z[24] * z[56] + z[25] * z[59] - z[26] * z[61]
+    #z[93] = z[11] * z[81] - z[12] * z[86]
+    #z[95] = z[11] * z[86] + z[12] * z[81]
+    #z[79] = z[27] * z[63] + z[28] * z[55] + z[29] * z[69]
+    #z[88] = pow(z[24],2) + pow(z[25],2) + pow(z[26],2)
+    #z[91] = z[11] * z[79] - z[12] * z[88]
+    #z[97] = z[11] * z[88] + z[12] * z[79]
+    #z[101] = rR * z[38]
+    #z[136] = rR * (z[48] * z[52]+z[49] * z[54])
+    #z[140] = z[101] - z[136]
+    #z[186] = z[26] * z[70]
+    #z[189] = z[186] / pow(z[30],0.5)
+    #z[192] = z[189] / pow(z[31],2)
+    #z[195] = rF * z[192]
+    #z[208] = z[3] * z[140]
+    #z[198] = (z[26] * z[189]+z[31] * z[70]) / pow(z[31],2)
+    #z[201] = rF * z[198]
+    #z[204] = z[195] - d1 * z[29] - d2 * z[77] - d3 * z[61] - z[26] * z[201] - z[34] * z[70]
+    #z[100] = rR * z[37]
+    #z[110] = d1 * z[45]
+    #z[113] = d1 * z[40]
+    #z[134] = d3 * z[84]
+    #z[127] = d2 * z[84]
+    #z[173] = z[4] * z[6]
+    #z[174] = z[3] * z[10] + z[9] * z[173]
+    #z[128] = d3 * z[85] - d2 * z[78]
+    #z[176] = z[3] * z[9] - z[10] * z[173]
+    #z[161] = z[34] * z[94]
+    #z[179] = z[11] * z[174] + z[12] * z[76]
+    #z[141] = z[11] * z[21] - z[12] * z[27]
+    #z[144] = z[11] * z[27] + z[12] * z[21]
+    #z[153] = z[35] * (z[24] * z[84]+z[90] * z[141]+z[94] * z[144])
+    #z[142] = z[11] * z[22] - z[12] * z[28]
+    #z[145] = z[11] * z[28] + z[12] * z[22]
+    #z[158] = z[35] * (z[25] * z[84]+z[90] * z[142]+z[94] * z[145])
+    #z[147] = z[34] * z[90]
+    #z[182] = z[12] * z[174] - z[11] * z[76]
+    #z[214] = z[3] * z[100] + z[3] * z[110] + z[76] * z[113] + z[76] * z[134] + z[127] * z[174] + z[128] * z[176] + z[161] * z[179] - z[1] * z[153] - z[2] * z[158] - z[147] * z[182]
+    #z[239] = z[204] * z[214]
+    #z[159] = z[25] * z[35] * z[89]
+    #z[154] = z[24] * z[35] * z[89]
+    #z[213] = z[1] * z[159] - z[2] * z[154]
+    #z[254] = z[2] * z[213]
+    #z[218] = -z[1] * z[154] - z[2] * z[159]
+    #z[236] = z[204] * z[218]
+    #z[178] = z[11] * z[13] - z[6] * z[12]
+    #z[99] = rR * z[40]
+    #z[181] = z[6] * z[11] + z[12] * z[13]
+    #z[211] = z[1] * z[158] + z[13] * z[127] + z[161] * z[178] - z[99] - z[2] * z[153] - z[6] * z[113] - z[6] * z[134] - z[15] * z[128] - z[147] * z[181]
+    #z[252] = z[2] * z[211]
+    #z[257] = z[239] * z[254] - z[236] * z[252]
+    #z[157] = z[35] * (z[25] * z[83]+z[92] * z[142]+z[96] * z[145])
+    #z[126] = d2 * z[83]
+    #z[163] = z[34] * z[96]
+    #z[39] = z[1] * z[17] - z[2] * z[18]
+    #z[98] = rR * z[39]
+    #z[152] = z[35] * (z[24] * z[83]+z[92] * z[141]+z[96] * z[144])
+    #z[112] = d1 * z[39]
+    #z[133] = d3 * z[83]
+    #z[130] = d3 * z[87] - d2 * z[80]
+    #z[149] = z[34] * z[92]
+    #z[210] = z[1] * z[157] + z[13] * z[126] + z[163] * z[178] - z[98] - z[2] * z[152] - z[6] * z[112] - z[6] * z[133] - z[15] * z[130] - z[149] * z[181]
+    #z[135] = rR * (z[48] * z[51]+z[49] * z[53])
+    #z[139] = z[100] - z[135]
+    #z[207] = z[3] * z[139]
+    #z[228] = z[2] * z[207]
+    #z[184] = z[26] * z[68]
+    #z[187] = z[184] / pow(z[30],0.5)
+    #z[190] = z[187] / pow(z[31],2)
+    #z[193] = rF * z[190]
+    #z[196] = (z[26] * z[187]+z[31] * z[68]) / pow(z[31],2)
+    #z[199] = rF * z[196]
+    #z[202] = z[193] + rR * z[4] + d1 * z[173] + d3 * z[60] - d2 * z[76] - z[26] * z[199] - z[34] * z[68]
+    #z[221] = z[211] * z[218] - z[213] * z[214]
+    #z[42] = pow(z[5],2) + pow(z[6],2)
+    #z[137] = rR * z[42]
+    #z[206] = z[3] * z[18] + z[4] * z[20]
+    #z[231] = z[137] * z[206]
+    #z[156] = z[35] * (z[25] * z[82]+z[93] * z[142]+z[95] * z[145])
+    #z[125] = d2 * z[82]
+    #z[162] = z[34] * z[95]
+    #z[151] = z[35] * (z[24] * z[82]+z[93] * z[141]+z[95] * z[144])
+    #z[114] = d1 * z[42]
+    #z[132] = d3 * z[82]
+    #z[129] = d3 * z[86] - d2 * z[81]
+    #z[150] = z[34] * z[93]
+    #z[209] = z[1] * z[156] + z[13] * z[125] + z[162] * z[178] - z[2] * z[151] - z[6] * 
+    #z[114] - z[6] * z[132] - z[15] * z[129] - z[150] * z[181]
+    #z[216] = z[76] * z[114] + z[76] * z[132] + z[125] * z[174] + z[129] * z[176] + 
+    #z[162] * z[179] - z[1] * z[151] - z[2] * z[156] - z[150] * z[182]
+    #z[222] = z[209] * z[218] - z[213] * z[216]
+    #z[225] = z[2] * z[218] - z[1] * z[213]
+    #z[233] = z[137] * z[207]
+    #z[268] = z[221] * z[231] + z[222] * z[228] - z[225] * z[233]
+    #z[46] = z[6] * z[38]
+    #z[111] = d1 * z[46]
+    #z[215] = z[3] * z[101] + z[3] * z[111] + z[76] * z[112] + z[76] * z[133] + z[126] * 
+    #z[174] + z[130] * z[176] + z[163] * z[179] - z[1] * z[152] - z[2] * z[157] - z[149] * 
+    #z[182]
+    #z[265] = z[204] * z[213]
+    #z[223] = z[1] * z[207]
+    #z[205] = -z[3] * z[17] - z[4] * z[19]
+    #z[219] = z[1] * z[206] - z[2] * z[205]
+    #z[230] = z[1] * z[218] + z[2] * z[213]
+    #z[234] = z[204] * (z[223] * z[225]-z[219] * z[221]-z[228] * z[230])
+    #z[274] = (z[208] * z[257]+z[210] * z[228] * z[236]-z[202] * z[268]-z[215] * z[228] * 
+    #z[265]) / z[234]
+    #z[160] = z[35] * (z[91] * z[142]+z[97] * z[145])
+    #z[164] = z[34] * z[97]
+    #z[155] = z[35] * (z[91] * z[141]+z[97] * z[144])
+    #z[131] = d3 * z[88] - d2 * z[79]
+    #z[148] = z[34] * z[91]
+    #z[212] = z[1] * z[160] + z[164] * z[178] - z[2] * z[155] - z[15] * z[131] - z[148] * 
+    #z[181]
+    #z[185] = z[26] * z[69]
+    #z[188] = z[185] / pow(z[30],0.5)
+    #z[191] = z[188] / pow(z[31],2)
+    #z[194] = rF * z[191]
+    #z[197] = (z[26] * z[188]+z[31] * z[69]) / pow(z[31],2)
+    #z[200] = rF * z[197]
+    #z[203] = z[194] + d3 * z[26] - z[26] * z[200] - z[34] * z[69]
+    #z[217] = z[131] * z[176] + z[164] * z[179] - z[1] * z[155] - z[2] * z[160] - z[148] * 
+    #z[182]
+    #z[275] = (z[212] * z[228] * z[236]-z[203] * z[268]-z[217] * z[228] * z[265]) / z[234]
+    #z[47] = pow(z[7],2) + pow(z[8],2)
+    #z[138] = rR * z[47]
+    #z[238] = z[206] * z[213]
+    #z[235] = z[206] * z[211] - z[2] * z[207]
+    #z[241] = z[207] * z[213]
+    #z[242] = z[1] * z[204]
+    #z[243] = z[238] * z[239] - z[235] * z[236] - z[241] * z[242]
+    #z[273] = z[138] * z[243] / z[234]
+    #z[246] = z[205] * z[213]
+    #z[247] = z[2] * z[204]
+    #z[244] = z[205] * z[211] - z[1] * z[207]
+    #z[248] = z[239] * z[246] + z[241] * z[247] - z[236] * z[244]
+    #z[276] = z[138] * z[248] / z[234]
+    #z[260] = z[1] * z[213]
+    #z[258] = z[1] * z[211]
+    #z[261] = z[239] * z[260] - z[236] * z[258]
+    #z[226] = z[137] * z[205]
+    #z[269] = z[221] * z[226] + z[222] * z[223] - z[230] * z[233]
+    #z[277] = (z[208] * z[261]+z[210] * z[223] * z[236]-z[202] * z[269]-z[215] * z[223] * z[265]) / z[234]
+    #z[278] = (z[212] * z[223] * z[236]-z[203] * z[269]-z[217] * z[223] * z[265]) / z[234]
+    #u1 = z[274] * u4 + z[275] * u7 - z[273] * u6
+    #u2 = z[276] * u6 - z[277] * u4 - z[278] * u7
+
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
 
@@ -112,24 +351,28 @@ def split_around_nan(sig):
 
     return indices, arrays
 
-def steer_torque(steerRate, steerAccel, steerTubeTorque, handlebarInertia,
+def steer_torque(handlebarRate, handlebarAccel, steerRate, steerColumnTorque, handlebarInertia,
         damping, friction):
     '''Returns the steer torque applied by the rider.
 
     Parameters
     ----------
+    handlebarRate : ndarray, shape(3,n)
+        The angular velocity of the handlebar in the Newtonian frame expressed
+        in body fixed coordinates.
+    handlebarAccel : ndarray, shape(3,n)
+        The angular acceleration of the handlebar in the Newtonian frame
+        expressed in body fixed coordinates.
     steerRate : ndarray, shape(n,)
-        The steer rate, i.e. rate of rotation of the fork/handlebars relative
-        to the bicycle frame.
-    steerAccel : ndarray, shape(n,)
-        The angular acceleration of the fork/handlebars relative to the bicycle
-        frame.
-    steerTubeTorque : ndarray, shape(n,)
-        The torque measured in the steer tube between the handlebars and the
-        fork.
-    handlebarInertia : float
-        The inertia of the handlebars. Includes everything above and including
-        the steer tube torque sensor.
+        The rate of the steer column relative to the frame about the steer
+        axis.
+    steerColumnTorque : ndarray, shape(n,)
+        The torque measured on the steer column between the handlebars and the
+        fork and between the upper and lower bearings.
+    handlebarInertia : ndarray, shape(3,3)
+        The inertia tensor of the handlebars. Includes everything above and including
+        the steer tube torque sensor. This is relative to a reference frame
+        aligned with the steer axis and is about the center of mass.
     damping : float
         The damping coefficient associated with the bearing friction.
     friction : float
@@ -141,8 +384,32 @@ def steer_torque(steerRate, steerAccel, steerTubeTorque, handlebarInertia,
         The steer torque applied by the rider.
 
     '''
-    return (handlebarInertia * steerAccel - damping * steerRate -
-            np.sign(steerRate) * friction + steerTubeTorque)
+    # this assumes a symmetric handlebar
+    Ts = steerColumnTorque
+    # bearing friction torque
+    # take half of this because we calculated the damping and friction of both
+    # sets of bearings combined
+    Tf = (damping * steerRate + np.sign(steerRate) * friction) / 2.
+    # derivative of the angluar momentum of the handlebar
+    I = handlebarInertia
+    w = handlebarRate
+    a = handlebarAccel
+    hdot1 = I[1, 1] * w[0] * w[1]
+    hdot2 = I[2, 0] * a[0]
+    hdot3 = I[2, 2] * a[2]
+    hdot4 = - w[1] * (I[0, 0] * w[1] + I[2, 0] * w[2])
+    time = Ts.time()
+    plt.figure()
+    plt.plot(time, hdot1, time, hdot2, time, hdot3, time, hdot4)
+    plt.legend(['hd1', 'hd2', 'hd3', 'hd4'])
+
+    Hdot = (I[1, 1] * w[0] * w[1] + I[2, 0] * a[0] + I[2, 2] * a[2]
+            - w[1] * (I[0, 0] * w[1] + I[2, 0] * w[2]))
+    plt.figure()
+    plt.plot(time, Ts, time, Tf, time, Hdot, time, Ts+Tf+Hdot)
+    plt.legend(['Ts', 'Tf', 'Hdot', 'Tdelta'])
+    plt.show()
+    return Ts + Tf + Hdot
 
 def sync_error(tau, signal1, signal2, time):
     '''Returns the error between two signal time histories.

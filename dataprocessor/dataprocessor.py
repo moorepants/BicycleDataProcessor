@@ -635,14 +635,21 @@ class Run():
             self.computedSignals['RollRate'] = rr
             self.computedSignals['PitchRate'] = pr
 
-            steerTorque = steer_torque(
+            # steer torque
+            handlebarRate = np.vstack((self.truncatedSignals['AngularRateX'],
+                                       self.truncatedSignals['AngularRateY'],
+                                       self.truncatedSignals['ForkRate']))
+            handlebarAccel =\
+            np.vstack((self.truncatedSignals['AngularRateX'].time_derivative(),
+                       self.truncatedSignals['AngularRateY'].time_derivative(),
+                       self.truncatedSignals['ForkRate'].time_derivative()))
+
+            steerTorque = steer_torque(handlebarRate, handlebarAccel,
                 self.computedSignals['SteerRate'],
-                self.computedSignals['SteerRate'].time_derivative(),
                 self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter'),
                 rigid.steer_assembly_moment_of_inertia(fork=False,
-                    wheel=False).nominal_value,
+                    wheel=False, nominal=True),
                 0.3475, 0.0861)
-            steerTorque = steerTorque.filter(50.)
             steerTorque.units = 'newton*meter'
             steerTorque.name = 'SteerTorque'
             self.computedSignals['SteerTorque'] = steerTorque
