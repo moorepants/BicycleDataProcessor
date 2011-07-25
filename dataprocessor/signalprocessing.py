@@ -408,7 +408,7 @@ def steer_torque(handlebarRate, handlebarAccel, steerRate, steerColumnTorque, ha
     plt.figure()
     plt.plot(time, Ts, time, Tf, time, Hdot, time, Ts+Tf+Hdot)
     plt.legend(['Ts', 'Tf', 'Hdot', 'Tdelta'])
-    plt.show()
+    #plt.show()
     return Ts + Tf + Hdot
 
 def sync_error(tau, signal1, signal2, time):
