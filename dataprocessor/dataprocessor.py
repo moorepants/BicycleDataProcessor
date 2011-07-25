@@ -10,6 +10,7 @@ from math import pi
 import numpy as np
 from scipy import io
 from scipy.interpolate import UnivariateSpline
+from scipy.integrate import cumtrapz
 import matplotlib.pyplot as plt
 
 # local dependencies
@@ -185,18 +186,7 @@ class Signal(np.ndarray):
 
     def integrate(self, initialCondition=0.):
         """Integrates the signal using the trapezoidal rule."""
-        # set the first value of the integration to the initial condition
-        grated = [initialCondition]
-        time = self.time()
-        for i, y in enumerate(self):
-            if i == 0:
-                pass
-            else:
-                a, b = time[i - 1], time[i]
-                fa, fb = self[i -1], y
-                grated.append(grated[-1] + (b - a) * (fa + fb) / 2.)
-        #grated = np.hstack(0., cumtrapz(self, x=self.time())) + initialCondition
-        return np.array(grated)
+        return np.hstack(0., cumtrapz(self, x=self.time())) + initialCondition
 
     def plot(self, show=True):
         """Plots and returns the signal versus time."""
