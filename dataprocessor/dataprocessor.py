@@ -180,9 +180,14 @@ class Signal(np.ndarray):
 
             return newSig
 
+    def filter(self, frequency):
+        """Returns the signal filtered by a low pass Butterworth at the given
+        frequency."""
+        filteredArray = butterworth(self.spline(), frequency, self.sampleRate)
+        return Signal(filteredArray, self.as_dictionary())
+
     def frequency(self):
         """Returns the frequency content of the signal."""
-
         return freq_spectrum(self.spline(), self.sampleRate)
 
     def integrate(self, initialCondition=0., subtractMean=False):
@@ -197,16 +202,14 @@ class Signal(np.ndarray):
             def line(x, a, b, c):
                 return a * x**2 + b * x + c
             popt, pcov = curve_fit(line, time, grated)
-            print popt
             grated = grated - line(time, popt[0], popt[1], popt[2])
         grated = Signal(grated, self.as_dictionary())
-        grated.units = self.units + '/sec'
+        grated.units = self.units + '*second'
         grated.name = self.name + 'Int'
         return grated
 
     def plot(self, show=True):
         """Plots and returns the signal versus time."""
-
         time = self.time()
         line = plt.plot(time, self)
         if show:
@@ -217,17 +220,10 @@ class Signal(np.ndarray):
         return line
 
     def spline(self):
-        """Returns the signal with nans fixed by a cubic spline."""
-
+        """Returns the signal with nans replaced by the resultes of a cubic
+        spline."""
         splined = spline_over_nan(self.time(), self)
         return Signal(splined, self.as_dictionary())
-
-    def filter(self, frequency):
-        """Returns the signal filtered by a low pass Butterworth at the given
-        frequency."""
-
-        filteredArray = butterworth(self.spline(), frequency, self.sampleRate)
-        return Signal(filteredArray, self.as_dictionary())
 
     def time(self):
         """Returns the time vector of the signal."""
@@ -235,13 +231,12 @@ class Signal(np.ndarray):
 
     def time_derivative(self):
         """Returns the time derivative of the signal."""
-
         # caluculate the numerical time derivative
         dsdt = derivative(self.time(), self, method='combination')
-        # map the metadeta from self onto the derivative
+        # map the metadata from self onto the derivative
         dsdt = Signal(dsdt, self.as_dictionary())
-        #dsdt.name = dsdt.name + 'Dot'
-        #dsdt.units = dsdt.units + '/second'
+        dsdt.name = dsdt.name + 'Dot'
+        dsdt.units = dsdt.units + '/second'
         return dsdt
 
     def truncate(self, tau):
@@ -450,9 +445,9 @@ class Sensor():
 
         """
         self.name = name
-        self.store_calibration_data(calibrationTable)
+        self._store_calibration_data(calibrationTable)
 
-    def store_calibration_data(self, calibrationTable):
+    def _store_calibration_data(self, calibrationTable):
         """
         Stores a dictionary of calibration data for the sensor for all
         calibration dates in the object.
@@ -529,7 +524,7 @@ class Run():
             This file must contain the run data table and the calibration data
             table.
         forceRecalc : boolean, optional
-            If true then it will force a recalculation of all the the non raw
+            If true then it will force a recalculation of all the the non-raw
             data.
         filterSigs : boolean, optional
             If true the computed signals will be low pass filtered.
@@ -555,7 +550,7 @@ class Run():
         computedCols = [x['signal'] for x in
                         signalTable.where("isRaw == False")]
 
-        # store the current data for this run
+        # store the metadata for this run
         print "Loading metadata from the database."
         for col in dataTable.colnames:
             if col not in (rawDataCols + computedCols):
@@ -573,11 +568,16 @@ class Run():
         # this code will not work for other bicycle/rider combinations. it will
         # need to be updated
         bicycles = {'Rigid Rider': 'Rigid'}
-        pathToBicycles = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleParameters/data/bicycles'
-        rigid = bp.Bicycle(bicycles[self.metadata['Bicycle']], pathToBicycles=pathToBicycles)
-        pathToRider = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleParameters/data/riders'
-        rigid.add_rider(pathToRider=pathToRider + '/Jason/JasonRigidBenchmark.txt')
-        self.bikeParameters = bp.remove_uncertainties(rigid.parameters['Benchmark'])
+        pathToBicycles = ('/media/Data/Documents/School/UC Davis/' +
+                          'Bicycle Mechanics/BicycleParameters/data/bicycles')
+        self.bicycle = bp.Bicycle(bicycles[self.metadata['Bicycle']],
+                                  pathToBicycles=pathToBicycles)
+        pathToRider = ('/media/Data/Documents/School/UC Davis/' +
+                       'Bicycle Mechanics/BicycleParameters/data/riders')
+        self.bicycle.add_rider(pathToRider=pathToRider +
+                               '/Jason/JasonRigidBenchmark.txt')
+        self.bikeParameters =\
+            bp.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
         if forceRecalc == True:
             print "Computing signals from raw data."
@@ -597,9 +597,9 @@ class Run():
                 self.metadata['NISampleRate'],
                 self.metadata['Speed'])
 
-            # truncate all the raw data signals
+            # truncate and spline all of the calibrated signals
             for name, sig in self.calibratedSignals.items():
-                self.truncatedSignals[name] = sig.truncate(self.tau)
+                self.truncatedSignals[name] = sig.truncate(self.tau).spline()
 
             # compute the final output signals
             noChange = ['FiveVolts',
@@ -611,108 +611,17 @@ class Run():
             for sig in noChange:
                 if sig in ['RollAngle', 'SteerAngle']:
                     self.computedSignals[sig] =\
-                    self.truncatedSignals[sig].convert_units('radian').filter(50.)
+                    self.truncatedSignals[sig].convert_units('radian')
                 else:
                     self.computedSignals[sig] = self.truncatedSignals[sig]
 
-            # the pull force was always from the left side, so far...
-            pullForce = -self.truncatedSignals['PullForce']
-            pullForce.name = self.truncatedSignals['PullForce'].name
-            pullForce.units = self.truncatedSignals['PullForce'].units
-            self.computedSignals['PullForce'] =\
-            pullForce.convert_units('newton')
-
-            self.computedSignals['ForwardSpeed'] =\
-                (self.bikeParameters['rR'] *
-                self.truncatedSignals['RearWheelRate'])
-            self.computedSignals['ForwardSpeed'].units = 'meter/second'
-            self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
-
-            steerRate =\
-                steer_rate(self.truncatedSignals['ForkRate'],
-                self.truncatedSignals['AngularRateZ'])
-            steerRate.filter(50.)
-            steerRate.units = 'radian/second'
-            steerRate.name = 'SteerRate'
-            self.computedSignals['SteerRate'] = steerRate
-
-            yr, rr, pr = yaw_roll_pitch_rate(
-                    self.truncatedSignals['AngularRateX'],
-                    self.truncatedSignals['AngularRateY'],
-                    self.truncatedSignals['AngularRateZ'],
-                    self.bikeParameters['lam'],
-                    rollAngle=self.truncatedSignals['RollAngle'].convert_units('radian'))
-            yr = yr.filter(50.)
-            yr.units = 'radian/second'
-            yr.name = 'YawRate'
-            rr = rr.filter(50.)
-            rr.units = 'radian/second'
-            rr.name = 'RollRate'
-            pr = pr.filter(50.)
-            pr.units = 'radian/second'
-            pr.name = 'PitchRate'
-
-            self.computedSignals['YawRate'] = yr
-            self.computedSignals['RollRate'] = rr
-            self.computedSignals['PitchRate'] = pr
-
-            # steer torque
-            frameAngRate = np.vstack((
-                self.truncatedSignals['AngularRateX'].spline(),
-                self.truncatedSignals['AngularRateY'].spline(),
-                self.truncatedSignals['AngularRateZ'].spline()))
-            frameAngAccel = np.vstack((
-                self.truncatedSignals['AngularRateX'].time_derivative().spline(),
-                self.truncatedSignals['AngularRateY'].time_derivative().spline(),
-                self.truncatedSignals['AngularRateZ'].time_derivative().spline()))
-            frameAccel = np.vstack((
-                self.truncatedSignals['AccelerationX'].spline(),
-                self.truncatedSignals['AccelerationY'].spline(),
-                self.truncatedSignals['AccelerationZ'].spline()))
-            handlebarAngRate = self.truncatedSignals['ForkRate']
-            handlebarAngAccel = self.truncatedSignals['ForkRate'].time_derivative()
-            steerAngle =\
-            self.truncatedSignals['SteerAngle'].convert_units('radian')
-            steerColumnTorque = self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
-            handlebarMass = self.bikeParameters['mG']
-            handlebarInertia = rigid.steer_assembly_moment_of_inertia(fork=False,
-                    wheel=False, nominal=True)
-            damping = 0.3475
-            friction = 0.0861
-            steerTorque = steer_torque(frameAngRate,
-                         frameAngAccel,
-                         frameAccel,
-                         handlebarAngRate,
-                         handlebarAngAccel,
-                         steerAngle,
-                         steerColumnTorque,
-                         handlebarMass,
-                         handlebarInertia,
-                         damping,
-                         friction,
-                         0.0244135366294,
-                         np.array([0.2, 0, 0.2]),plot=True)
-            print steerTorque
-            steerTorque.units = 'newton*meter'
-            steerTorque.name = 'SteerTorque'
-            self.computedSignals['SteerTorque'] = steerTorque
-
-            # experimental
-            yawAngle =\
-            self.computedSignals['YawRate'].integrate(subtractMean=True)
-            yawAngle.name = 'YawAngle'
-            yawAngle.units = 'radians'
-            self.computedSignals['YawAngle'] = yawAngle
-
-            lon, lat = rear_wheel_contact_rate(self.bikeParameters['rR'],
-                    self.computedSignals['RearWheelRate'],
-                    yawAngle)
-            lon.name = 'LongitudinalRearContactRate'
-            lon.units = 'meters/second'
-            lat.name = 'LateralRearContactRate'
-            lat.units = 'meters/second'
-            self.computedSignals[lon.name] = lon
-            self.computedSignals[lat.name] = lat
+            self.compute_pull_force()
+            self.compute_forward_speed()
+            self.compute_steer_rate()
+            self.compute_yaw_roll_pitch_rates()
+            self.compute_steer_torque()
+            self.compute_yaw_angle()
+            self.compute_wheel_contact_rates()
 
             if filterSigs:
                 # filter all the computed signals
@@ -723,6 +632,198 @@ class Run():
             print "Loading computed signals from database."
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
+
+    def compute_wheel_contact_rates(self):
+        """Calculates the rates of the wheel contact points in the ground
+        plane."""
+
+        try:
+            yawAngle = self.computedSignals['YawAngle']
+            rearWheelRate = self.truncatedSignals['RearWheelRate']
+            rR = self.bikeParameters['rR'] # this should be in meters
+        except AttributeError:
+            print('Either the yaw angle, rear wheel rate or ' +
+                  'front wheel radius is not available. The ' +
+                  'contact rates were not computed.')
+        else:
+            yawAngle = yawAngle.convert_units('radian')
+            rearWheelRate = rearWheelRate.convert_units('radian/second')
+
+            lon, lat = rear_wheel_contact_rate(rR, rearWheelRate, yawAngle)
+
+            lon.name = 'LongitudinalRearContactRate'
+            lon.units = 'meter/second'
+            self.computedSignals[lon.name] = lon
+
+            lat.name = 'LateralRearContactRate'
+            lat.units = 'meter/second'
+            self.computedSignals[lat.name] = lat
+
+    def compute_yaw_angle(self):
+        """Computes the yaw angle by integrating the yaw rate."""
+
+        # get the yaw rate
+        try:
+            yawRate = self.computedSignals['YawRate']
+        except AttributeError:
+            print('YawRate is not available. The YawAngle was not computed.')
+        else:
+            # convert to to radians per second
+            yawRate = yawRate.convert_units('radian/second')
+            # integrate and try to account for the drift
+            yawAngle = yawRate.integrate(subtractMean=True)
+            # set the new name and units
+            yawAngle.name = 'YawAngle'
+            yawAngle.units = 'radian'
+            # store in computed signals
+            self.computedSignals['YawAngle'] = yawAngle
+
+    def compute_steer_torque(self, plotComponents=False):
+        # steer torque
+        try:
+            frameAngRate = np.vstack((
+                self.truncatedSignals['AngularRateX'],
+                self.truncatedSignals['AngularRateY'],
+                self.truncatedSignals['AngularRateZ']))
+            frameAngAccel = np.vstack((
+                self.truncatedSignals['AngularRateX'].time_derivative(),
+                self.truncatedSignals['AngularRateY'].time_derivative(),
+                self.truncatedSignals['AngularRateZ'].time_derivative()))
+            frameAccel = np.vstack((
+                self.truncatedSignals['AccelerationX'],
+                self.truncatedSignals['AccelerationY'],
+                self.truncatedSignals['AccelerationZ']))
+            handlebarAngRate = self.truncatedSignals['ForkRate']
+            handlebarAngAccel = self.truncatedSignals['ForkRate'].time_derivative()
+            steerAngle = self.truncatedSignals['SteerAngle']
+            steerColumnTorque =\
+                self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
+            handlebarMass = self.bikeParameters['mG']
+            handlebarInertia =\
+                self.bicycle.steer_assembly_moment_of_inertia(fork=False,
+                    wheel=False, nominal=True)
+            # damping and friction values come from Peter's work, I need to verify
+            # them still
+            damping = 0.3475
+            friction = 0.0861
+            d = 0.0244135366294 # this is calculated with BicycleParameters
+            ds = np.array([0.1349375, 0., -0.3603625]) # i measured these
+        except AttributeError:
+            print('All signals were not available. SteerTorque was not ' +
+                  'computed.')
+        else:
+            steerTorque = steer_torque(
+                              frameAngRate,
+                              frameAngAccel,
+                              frameAccel,
+                              handlebarAngRate,
+                              handlebarAngAccel,
+                              steerAngle,
+                              steerColumnTorque,
+                              handlebarMass,
+                              handlebarInertia,
+                              damping,
+                              friction,
+                              d,
+                              ds,
+                              plot=plotComponents)
+            stDict = {'units':'newton*meter',
+                      'name':'SteerTorque',
+                      'runid':self.metadata['RunID'],
+                      'sampleRate':steerAngle.sampleRate,
+                      'source':'NA'}
+            self.computedSignals['SteerTorque'] = Signal(steerTorque, stDict)
+
+    def compute_yaw_roll_pitch_rates(self):
+        """Computes the yaw, roll and pitch rates of the bicycle frame."""
+
+        try:
+            omegaX = self.truncatedSignals['AngularRateX']
+            omegaY = self.truncatedSignals['AngularRateY']
+            omegaZ = self.truncatedSignals['AngularRateZ']
+            rollAngle = self.truncatedSignals['RollAngle']
+            lam = self.bikeParameters['lam']
+        except AttributeError:
+            print('All needed signals are not available. ' +
+                  'Yaw, roll and pitch rates were not computed.')
+        else:
+            omegaX = omegaX.convert_units('radian/second')
+            omegaY = omegaY.convert_units('radian/second')
+            omegaZ = omegaZ.convert_units('radian/second')
+            rollAngle = rollAngle.convert_units('radian')
+
+            yr, rr, pr = yaw_roll_pitch_rate(omegaX, omegaY, omegaZ, lam,
+                                             rollAngle=rollAngle)
+            yr.units = 'radian/second'
+            yr.name = 'YawRate'
+            rr.units = 'radian/second'
+            rr.name = 'RollRate'
+            pr.units = 'radian/second'
+            pr.name = 'PitchRate'
+
+            self.computedSignals['YawRate'] = yr
+            self.computedSignals['RollRate'] = rr
+            self.computedSignals['PitchRate'] = pr
+
+    def compute_steer_rate(self):
+        """Calculate the steer rate from the frame and fork rates."""
+        try:
+            forkRate = self.truncatedSignals['ForkRate']
+            omegaZ = self.truncatedSignals['AngularRateZ']
+        except AttributeError:
+            print('ForkRate or AngularRateZ is not available. ' +
+                  'SteerRate was not computed.')
+        else:
+            forkRate = forkRate.convert_units('radian/second')
+            omegaZ = omegaZ.convert_units('radian/second')
+
+            steerRate = steer_rate(forkRate, omegaZ)
+            steerRate.units = 'radian/second'
+            steerRate.name = 'SteerRate'
+            self.computedSignals['SteerRate'] = steerRate
+
+    def compute_forward_speed(self):
+        """Calculates the magnitude of the main component of velocity of the
+        center of the rear wheel."""
+
+        try:
+            rR = self.bikeParameters['rR']
+            rearWheelRate = self.truncatedSignals['RearWheelRate']
+        except AttributeError:
+            print('rR or RearWheelRate is not availabe. ' +
+                  'ForwardSpeed was not computed.')
+        else:
+            rearWheelRate = rearWheelRate.convert_units('radian/second')
+
+            self.computedSignals['ForwardSpeed'] = rR * rearWheelRate
+            self.computedSignals['ForwardSpeed'].units = 'meter/second'
+            self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
+
+    def compute_pull_force(self, fromLeft=True):
+        """
+        Computes the pull force from the truncated pull force signal.
+
+        Parameters
+        ----------
+        fromLeft : boolean, optional
+            If true the pull is assumed to be from the left side of the
+            bicycle.
+
+        """
+        try:
+            pullForce = self.truncatedSignals['PullForce']
+        except AttributeError:
+            print 'PullForce was not available. PullForce was not computed.'
+        else:
+            pullForce = pullForce.convert_units('newton')
+
+            if fromLeft:
+                pullForce = -pullForce
+
+            pullForce.name = 'PullForce'
+            pullForce.units = 'newton'
+
+            self.computedSignals[pullForce.name] = pullForce
 
     def __str__(self):
         '''Prints basic run information to the screen.'''
@@ -832,6 +933,7 @@ Notes: {6}'''.format(
             os.system('vlc "' + path + '"')
         else:
             print "No video for this run"
+
 
 def matlab_date_to_object(matDate):
     '''Returns a date time object based on a Matlab `datestr()` output.
