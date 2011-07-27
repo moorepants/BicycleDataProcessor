@@ -11,6 +11,7 @@ import numpy as np
 from scipy import io
 from scipy.interpolate import UnivariateSpline
 from scipy.integrate import cumtrapz
+from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 # local dependencies
@@ -184,9 +185,24 @@ class Signal(np.ndarray):
 
         return freq_spectrum(self.spline(), self.sampleRate)
 
-    def integrate(self, initialCondition=0.):
+    def integrate(self, initialCondition=0., subtractMean=False):
         """Integrates the signal using the trapezoidal rule."""
-        return np.hstack(0., cumtrapz(self, x=self.time())) + initialCondition
+        time = self.time()
+        # integrate using trapz and adjust with the initial condition
+        grated = np.hstack((0., cumtrapz(self, x=time))) + initialCondition
+        # this tries to characterize the drift in the integrated signal. It
+        # works well for signals from straight line tracking but not
+        # necessarily for lange change.
+        if subtractMean:
+            def line(x, a, b, c):
+                return a * x**2 + b * x + c
+            popt, pcov = curve_fit(line, time, grated)
+            print popt
+            grated = grated - line(time, popt[0], popt[1], popt[2])
+        grated = Signal(grated, self.as_dictionary())
+        grated.units = self.units + '/sec'
+        grated.name = self.name + 'Int'
+        return grated
 
     def plot(self, show=True):
         """Plots and returns the signal versus time."""
@@ -641,23 +657,62 @@ class Run():
             self.computedSignals['PitchRate'] = pr
 
             # steer torque
-            handlebarRate = np.vstack((self.truncatedSignals['AngularRateX'],
-                                       self.truncatedSignals['AngularRateY'],
-                                       self.truncatedSignals['ForkRate']))
-            handlebarAccel =\
-            np.vstack((self.truncatedSignals['AngularRateX'].time_derivative(),
-                       self.truncatedSignals['AngularRateY'].time_derivative(),
-                       self.truncatedSignals['ForkRate'].time_derivative()))
-
-            steerTorque = steer_torque(handlebarRate, handlebarAccel,
-                self.computedSignals['SteerRate'],
-                self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter'),
-                rigid.steer_assembly_moment_of_inertia(fork=False,
-                    wheel=False, nominal=True),
-                0.3475, 0.0861)
+            frameAngRate = np.vstack((
+                self.truncatedSignals['AngularRateX'].spline(),
+                self.truncatedSignals['AngularRateY'].spline(),
+                self.truncatedSignals['AngularRateZ'].spline()))
+            frameAngAccel = np.vstack((
+                self.truncatedSignals['AngularRateX'].time_derivative().spline(),
+                self.truncatedSignals['AngularRateY'].time_derivative().spline(),
+                self.truncatedSignals['AngularRateZ'].time_derivative().spline()))
+            frameAccel = np.vstack((
+                self.truncatedSignals['AccelerationX'].spline(),
+                self.truncatedSignals['AccelerationY'].spline(),
+                self.truncatedSignals['AccelerationZ'].spline()))
+            handlebarAngRate = self.truncatedSignals['ForkRate']
+            handlebarAngAccel = self.truncatedSignals['ForkRate'].time_derivative()
+            steerAngle =\
+            self.truncatedSignals['SteerAngle'].convert_units('radian')
+            steerColumnTorque = self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
+            handlebarMass = self.bikeParameters['mG']
+            handlebarInertia = rigid.steer_assembly_moment_of_inertia(fork=False,
+                    wheel=False, nominal=True)
+            damping = 0.3475
+            friction = 0.0861
+            steerTorque = steer_torque(frameAngRate,
+                         frameAngAccel,
+                         frameAccel,
+                         handlebarAngRate,
+                         handlebarAngAccel,
+                         steerAngle,
+                         steerColumnTorque,
+                         handlebarMass,
+                         handlebarInertia,
+                         damping,
+                         friction,
+                         0.0244135366294,
+                         np.array([0.2, 0, 0.2]),plot=True)
+            print steerTorque
             steerTorque.units = 'newton*meter'
             steerTorque.name = 'SteerTorque'
             self.computedSignals['SteerTorque'] = steerTorque
+
+            # experimental
+            yawAngle =\
+            self.computedSignals['YawRate'].integrate(subtractMean=True)
+            yawAngle.name = 'YawAngle'
+            yawAngle.units = 'radians'
+            self.computedSignals['YawAngle'] = yawAngle
+
+            lon, lat = rear_wheel_contact_rate(self.bikeParameters['rR'],
+                    self.computedSignals['RearWheelRate'],
+                    yawAngle)
+            lon.name = 'LongitudinalRearContactRate'
+            lon.units = 'meters/second'
+            lat.name = 'LateralRearContactRate'
+            lat.units = 'meters/second'
+            self.computedSignals[lon.name] = lon
+            self.computedSignals[lat.name] = lat
 
             if filterSigs:
                 # filter all the computed signals
