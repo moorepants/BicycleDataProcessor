@@ -601,7 +601,7 @@ class Run():
             for name, sig in self.calibratedSignals.items():
                 self.truncatedSignals[name] = sig.truncate(self.tau).spline()
 
-            # compute the final output signals
+            # transfer some of the signals to computed
             noChange = ['FiveVolts',
                         'PushButton',
                         'RearWheelRate',
@@ -615,6 +615,7 @@ class Run():
                 else:
                     self.computedSignals[sig] = self.truncatedSignals[sig]
 
+            # compute the quantities that we are interested in
             self.compute_pull_force()
             self.compute_forward_speed()
             self.compute_steer_rate()
@@ -622,6 +623,7 @@ class Run():
             self.compute_steer_torque()
             self.compute_yaw_angle()
             self.compute_wheel_contact_rates()
+            self.compute_wheel_contact_points()
 
             if filterSigs:
                 # filter all the computed signals
@@ -632,6 +634,33 @@ class Run():
             print "Loading computed signals from database."
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
+
+    def compute_wheel_contact_points(self):
+        """Computes the location of the wheel contact points in the ground
+        plane."""
+
+        # get the rates
+        try:
+            latRate = self.computedSignals['LateralRearContactRate']
+            lonRate = self.computedSignals['LongitudinalRearContactRate']
+        except AttributeError:
+            print('At least one of the rates are not available. ' +
+                  'The YawAngle was not computed.')
+        else:
+            # convert to radians per second
+            latRate = latRate.convert_units('meter/second')
+            lonRate = lonRate.convert_units('meter/second')
+            # integrate and try to account for the drift
+            lat = latRate.integrate(subtractMean=True)
+            lon = lonRate.integrate(subtractMean=True)
+            # set the new name and units
+            lat.name = 'LateralRearContact'
+            lat.units = 'meter'
+            lon.name = 'LongitudinalRearContact'
+            lon.units = 'meter'
+            # store in computed signals
+            self.computedSignals[lat.name] = lat
+            self.computedSignals[lon.name] = lon
 
     def compute_wheel_contact_rates(self):
         """Calculates the rates of the wheel contact points in the ground
