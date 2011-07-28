@@ -652,7 +652,7 @@ class Run():
             lonRate = lonRate.convert_units('meter/second')
             # integrate and try to account for the drift
             lat = latRate.integrate(subtractMean=True)
-            lon = lonRate.integrate(subtractMean=True)
+            lon = lonRate.integrate()
             # set the new name and units
             lat.name = 'LateralRearContact'
             lat.units = 'meter'
