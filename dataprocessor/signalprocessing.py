@@ -230,6 +230,10 @@ def steer_torque(frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
             i += 1
         plt.plot(time, steerTorque, '--')
         leg.append('steerTorque')
+        plt.plot(time, av2, '--')
+        leg.append('av2')
+        plt.plot(time, steerAngle, '--')
+        leg.append('steerAngle')
         plt.legend(leg)
         plt.show()
 

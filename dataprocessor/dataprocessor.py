@@ -575,7 +575,7 @@ class Run():
         pathToRider = ('/media/Data/Documents/School/UC Davis/' +
                        'Bicycle Mechanics/BicycleParameters/data/riders')
         self.bicycle.add_rider(pathToRider=pathToRider +
-                               '/Jason/JasonRigidBenchmark.txt')
+                               '/Jason/Parameters/JasonRigidBenchmark.txt')
         self.bikeParameters =\
             bp.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
