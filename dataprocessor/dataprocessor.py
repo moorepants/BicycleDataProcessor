@@ -176,6 +176,7 @@ class Signal(np.ndarray):
                     raise KeyError(('Conversion from {0} to {1} is not ' +
                         'possible or not defined.').format(self.units, units))
             # make the new signal
+            newSig = Signal(newSig, self.as_dictionary())
             newSig.units = units
 
             return newSig
