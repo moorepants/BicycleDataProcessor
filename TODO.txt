@@ -1,0 +1,4 @@
+- split runs with multiple perturbations
+- Integrate yaw angle for lane change runs in the gym
+- Make sure calcs work for most runs otherwise give warnings or errors
+- Write documentation
