@@ -569,14 +569,11 @@ class Run():
         # this code will not work for other bicycle/rider combinations. it will
         # need to be updated
         bicycles = {'Rigid Rider': 'Rigid'}
-        pathToBicycles = ('/media/Data/Documents/School/UC Davis/' +
-                          'Bicycle Mechanics/BicycleParameters/data/bicycles')
+        pathToData = ('/media/Data/Documents/School/UC Davis/' +
+                          'Bicycle Mechanics/BicycleParameters/data')
         self.bicycle = bp.Bicycle(bicycles[self.metadata['Bicycle']],
-                                  pathToBicycles=pathToBicycles)
-        pathToRider = ('/media/Data/Documents/School/UC Davis/' +
-                       'Bicycle Mechanics/BicycleParameters/data/riders')
-        self.bicycle.add_rider(pathToRider=pathToRider +
-                               '/Jason/Parameters/JasonRigidBenchmark.txt')
+                                  pathToData=pathToData)
+        self.bicycle.add_rider('Jason')
         self.bikeParameters =\
             bp.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
