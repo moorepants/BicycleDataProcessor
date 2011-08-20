@@ -572,8 +572,8 @@ class Run():
         pathToData = ('/media/Data/Documents/School/UC Davis/' +
                           'Bicycle Mechanics/BicycleParameters/data')
         self.bicycle = bp.Bicycle(bicycles[self.metadata['Bicycle']],
-                                  pathToData=pathToData)
-        self.bicycle.add_rider('Jason')
+                                  pathToData=pathToData, forceRawCalc=True)
+        self.bicycle.add_rider('Jason', reCalc=True)
         self.bikeParameters =\
             bp.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
@@ -907,10 +907,11 @@ Notes: {6}'''.format(
         Parameters
         ----------
         signalName : string
-            These should be strings that correspond to processed data
-            columns.
+            These should be strings that correspond to the signals available in
+            the computed data. If the first character of the string is `-` then
+            the negative signal will be plotted.
         signalType : string, optional
-            This allows you to plot from the various signal types. Options are
+            This allows you to plot from the other signal types. Options are
             'computed', 'truncated', 'calibrated', 'raw'.
 
         '''
@@ -919,19 +920,24 @@ Notes: {6}'''.format(
 
         # this currently only works if the sample rates from both sources is
         # the same
-        sampleRate = self.metadata['NISampleRate']
 
         mapping = {'computed': self.computedSignals,
                    'truncated': self.truncatedSignals,
                    'calibrated': self.calibratedSignals,
                    'raw': self.rawSignals}
 
+        leg = []
         for i, arg in enumerate(args):
-            signal = mapping[kwargs['signalType']][arg]
-            time = time_vector(len(signal), sampleRate)
-            plt.plot(time, signal)
+            legName = arg
+            sign = 1.
+            if arg[0] == '-':
+                arg = arg[1:]
+                sign = -1.
+            signal = sign * mapping[kwargs['signalType']][arg]
+            plt.plot(signal.time(), signal)
+            leg.append(legName + ' [' + mapping[kwargs['signalType']][arg].units + ']')
 
-        plt.legend([arg + ' [' + mapping[kwargs['signalType']][arg].units + ']' for arg in args])
+        plt.legend(leg)
 
         plt.title('Rider: ' + self.metadata['Rider'] +
                   ', Speed: ' + str(self.metadata['Speed']) + 'm/s' +
