@@ -555,23 +555,23 @@ def create_calibration_table_class():
 
     class CalibrationTable(tab.IsDescription):
         accuracy = tab.StringCol(10)
-        bias = tab.Float64Col(dflt=np.nan)
+        bias = tab.Float32Col(dflt=np.nan)
         calibrationID = tab.StringCol(5)
-        calibrationSupplyVoltage = tab.Float64Col(dflt=np.nan)
+        calibrationSupplyVoltage = tab.Float32Col(dflt=np.nan)
         name = tab.StringCol(20)
         notes = tab.StringCol(500)
-        offset = tab.Float64Col(dflt=np.nan)
-        runSupplyVoltage = tab.Float64Col(dflt=np.nan)
+        offset = tab.Float32Col(dflt=np.nan)
+        runSupplyVoltage = tab.Float32Col(dflt=np.nan)
         runSupplyVoltageSource = tab.StringCol(10)
-        rsq = tab.Float64Col(dflt=np.nan)
+        rsq = tab.Float32Col(dflt=np.nan)
         sensorType = tab.StringCol(20)
         signal = tab.StringCol(26)
-        slope = tab.Float64Col(dflt=np.nan)
+        slope = tab.Float32Col(dflt=np.nan)
         timeStamp = tab.StringCol(21)
         units = tab.StringCol(20)
-        v = tab.Float64Col(shape=(50,))
-        x = tab.Float64Col(shape=(50,))
-        y = tab.Float64Col(shape=(50,))
+        v = tab.Float32Col(shape=(50,))
+        x = tab.Float32Col(shape=(50,))
+        y = tab.Float32Col(shape=(50,))
 
     return CalibrationTable
 
@@ -600,19 +600,19 @@ def create_run_table_class(filteredrun, unfilteredrun):
     class RunTable(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(unfilteredrun['NICols']):
-            exec(col + " = tab.Float64Col(shape=(12000, ), pos=i)")
+            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
         for k, col in enumerate(VNavCols):
-            exec(col + " = tab.Float64Col(shape=(12000, ), pos=i+1+k)")
+            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(unfilteredrun['par'].items()):
             pos = k + 1 + i
             if isinstance(val, type(1)):
-                exec(key + " = tab.Int64Col(pos=pos)")
+                exec(key + " = tab.Int32Col(pos=pos)")
             elif isinstance(val, type('')):
                 exec(key + " = tab.StringCol(itemsize=300, pos=pos)")
             elif isinstance(val, type(1.)):
-                exec(key + " = tab.Float64Col(pos=pos)")
+                exec(key + " = tab.Float32Col(pos=pos)")
             elif isinstance(val, type(np.ones(1))):
-                exec(key + " = tab.Float64Col(shape=(" + str(len(val)) + ", ), pos=pos)")
+                exec(key + " = tab.Float32Col(shape=(" + str(len(val)) + ", ), pos=pos)")
 
         # add the columns for the processed data
         processedCols = ['FrameAccelerationX',
@@ -632,9 +632,9 @@ def create_run_table_class(filteredrun, unfilteredrun):
 
         for k, col in enumerate(processedCols):
             if col == 'tau':
-                exec(col + " = tab.Float64Col(pos=i + 1 + k)")
+                exec(col + " = tab.Float32Col(pos=i + 1 + k)")
             else:
-                exec(col + " = tab.Float64Col(shape=(12000, ), pos=i + 1 + k)")
+                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i + 1 + k)")
 
         # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val, processedCols)
