@@ -2,14 +2,12 @@
 
 # built in imports
 import os
-import re
 import datetime
 from math import pi
 
 # dependencies
 import numpy as np
 from scipy import io
-from scipy.interpolate import UnivariateSpline
 from scipy.integrate import cumtrapz
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
@@ -17,8 +15,7 @@ import matplotlib.pyplot as plt
 # local dependencies
 from signalprocessing import *
 from database import *
-#from dtk.process import *
-from bicycleparameters import bicycleparameters as bp
+import bicycleparameters as bp
 
 class Signal(np.ndarray):
     """
