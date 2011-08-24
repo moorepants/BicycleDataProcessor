@@ -572,7 +572,7 @@ class Run():
                                   pathToData=pathToData, forceRawCalc=True)
         self.bicycle.add_rider('Jason', reCalc=True)
         self.bikeParameters =\
-            bp.remove_uncertainties(self.bicycle.parameters['Benchmark'])
+            bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
         if forceRecalc == True:
             print "Computing signals from raw data."
