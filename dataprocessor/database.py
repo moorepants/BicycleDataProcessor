@@ -31,7 +31,7 @@ def get_cell(datatable, colname, rownum):
     '''
     cell = datatable[rownum][colname]
     # if it is a numpy array and the default size then unsize it
-    if isinstance(cell, type(np.ones(1))) and cell.shape[0] == 12000:
+    if isinstance(cell, type(np.ones(1))) and cell.shape[0] == 18000:
         numsamp = datatable[rownum]['NINumSamples']
         cell = unsize_vector(cell, numsamp)
 
@@ -181,14 +181,24 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     Parameters
     ----------
     datafile : string
-        path to the main hdf5 file: InstrumentedBicycleData.h5
+        Path to the main hdf5 file, typically an empty but structured file:
+        `InstrumentedBicycleData.h5`.
+    pathToData : string
+        Path to the directory containing the raw run data. Both the .mat and
+        .h5 files.
+
+    Examples
+    --------
+    >>>import dataprocessor as dp
+    >>># creates a new database with no data
+    >>>dp.create_database()
+    >>># adds all the data to the database
+    >>>dp.fill_tables()
 
     '''
 
     # open the hdf5 file for appending
     data = tab.openFile(datafile, mode='a')
-
-    print "Loading run data."
     # get the table
     datatable = data.root.data.datatable
     # get the row
@@ -197,20 +207,24 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     pathToRunH5 = os.path.join(pathToData, 'h5')
     files = sorted(os.listdir(pathToRunH5))
 
+    print "Loading run data."
+
     # fill the rows with data
-    for run in files:
-        print 'Adding run: %s' % run
+    for rownum, run in enumerate(files):
+        print 'Adding run: %s to row number: %d' % (run, rownum)
         rundata = get_run_data(os.path.join(pathToRunH5, run))
         for par, val in rundata['par'].items():
             row[par] = val
-        # only take the first 12000 samples for all runs
+        # only take the first 18000 samples for all runs
         for i, col in enumerate(rundata['NICols']):
-            try: # there are no roll pot measurements
-                row[col] = size_vector(rundata['NIData'][i], 12000)
-            except:
-                print "There is no %s measurement" % col
+            try:
+                row[col] = size_vector(rundata['NIData'][i], 18000)
+            except KeyError:
+                print "Not including the %s measurement" % col
+            except IndexError:
+                print "%s was not measured" % col
         for i, col in enumerate(rundata['VNavCols']):
-            row[col] = size_vector(rundata['VNavData'][i], 12000)
+            row[col] = size_vector(rundata['VNavData'][i], 18000)
         row.append()
     datatable.flush()
 
@@ -596,13 +610,22 @@ def create_run_table_class(filteredrun, unfilteredrun):
     # combine the VNavCols from unfiltered and filtered
     VNavCols = set(filteredrun['VNavCols'] + unfilteredrun['VNavCols'])
 
+    # these columns may be used in the future but for now there is no reason to
+    # introduce them into the database
+    ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
+                     [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
+                     [x + 'FootBridge' + y for x, y in zip(['Right', 'Left'], ['1', '2'])])
+
+    for col in ignoredNICols:
+        unfilteredrun['NICols'].remove(col)
+
     # set up the table description
     class RunTable(tab.IsDescription):
         # add all of the column headings from par, NICols and VNavCols
         for i, col in enumerate(unfilteredrun['NICols']):
-            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i)")
+            exec(col + " = tab.Float32Col(shape=(18000, ), pos=i)")
         for k, col in enumerate(VNavCols):
-            exec(col + " = tab.Float32Col(shape=(12000, ), pos=i+1+k)")
+            exec(col + " = tab.Float32Col(shape=(18000, ), pos=i+1+k)")
         for i, (key, val) in enumerate(unfilteredrun['par'].items()):
             pos = k + 1 + i
             if isinstance(val, type(1)):
@@ -634,7 +657,7 @@ def create_run_table_class(filteredrun, unfilteredrun):
             if col == 'tau':
                 exec(col + " = tab.Float32Col(pos=i + 1 + k)")
             else:
-                exec(col + " = tab.Float32Col(shape=(12000, ), pos=i + 1 + k)")
+                exec(col + " = tab.Float32Col(shape=(18000, ), pos=i + 1 + k)")
 
         # get rid intermediate variables so they are not stored in the class
         del(i, k, col, key, pos, val, processedCols)
