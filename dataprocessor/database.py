@@ -253,6 +253,16 @@ def fill_tables(datafile='InstrumentedBicycleData.h5',
     filteredRun, unfilteredRun = get_two_runs(pathToRunH5)
 
     niCols = filteredRun['NICols']
+    # these columns may be used in the future but for now there is no reason to
+    # introduce them into the database
+    ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
+                     [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
+                     [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
+                         'Left'], ['1', '2', '2', '1'])])
+
+    for col in ignoredNICols:
+        niCols.remove(col)
+
     # combine the VNavCols from unfiltered and filtered
     vnCols = set(filteredRun['VNavCols'] + unfilteredRun['VNavCols'])
 
@@ -614,7 +624,8 @@ def create_run_table_class(filteredrun, unfilteredrun):
     # introduce them into the database
     ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
                      [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
-                     [x + 'FootBridge' + y for x, y in zip(['Right', 'Left'], ['1', '2'])])
+                     [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
+                         'Left'], ['1', '2', '2', '1'])])
 
     for col in ignoredNICols:
         unfilteredrun['NICols'].remove(col)
