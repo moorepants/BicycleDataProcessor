@@ -13,8 +13,9 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 # local dependencies
-from signalprocessing import *
 from database import *
+from signalprocessing import *
+from dtk.process import spline_over_nan, derivative, butterworth, freq_spectrum
 import bicycleparameters as bp
 
 class Signal(np.ndarray):
@@ -590,7 +591,7 @@ class Run():
                 self.calibratedSignals['AccelerometerAccelerationY'],
                 self.calibratedSignals['AccelerationZ'],
                 self.metadata['NISampleRate'],
-                self.metadata['Speed'])
+                self.metadata['Speed'], plotError=True)
 
             # truncate and spline all of the calibrated signals
             for name, sig in self.calibratedSignals.items():

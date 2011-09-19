@@ -6,6 +6,8 @@
 Welcome to DataProcessor's documentation!
 =========================================
 
+DataProcessor is a package that processes the data collected from BicycleDAQ.
+
 Contents:
 
 .. toctree::

@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 # dependencies
+import numpy as np
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fmin
 import matplotlib.pyplot as plt # only for testing
 
 # local dependencies
-from signalprocessing import *
-from dtk.process import *
+#from signalprocessing import *
+from dtk.process import time_vector, butterworth, normalize, subtract_mean
 
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
@@ -111,6 +112,32 @@ def split_around_nan(sig):
         arrays, indices = [sig], [(0, len(sig))]
 
     return indices, arrays
+
+def steer_rate(forkRate, angularRateZ):
+    '''Returns the steer rate.
+
+    Parameters
+    ----------
+    forkRate : ndarray, size(n,)
+        The rate of the fork about the steer axis relative to the Newtonian
+        reference frame.
+    angularRateZ : ndarray, size(n,)
+        The rate of the bicycle frame about the steer axis in the Newtonian
+        reference frame.
+
+    Returns
+    -------
+    steerRate : ndarray, size(n,)
+        The rate of the fork about the steer axis relative to the bicycle
+        frame.
+
+    Notes
+    -----
+    The rates are defined such that a positive rate is pointing downward along
+    the steer axis.
+
+    '''
+    return forkRate - angularRateZ
 
 def steer_torque(frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
                  handlebarAngAccel, steerAngle, steerColumnTorque,
@@ -271,13 +298,13 @@ def sync_error(tau, signal1, signal2, time):
     ----------
     tau : float
         The time shift.
-    signal1 : ndarray, shape(n, )
+    signal1 : ndarray, shape(n,)
         The signal that will be interpolated. This signal is
         typically "cleaner" that signal2 and/or has a higher sample rate.
-    signal2 : ndarray, shape(n, )
+    signal2 : ndarray, shape(n,)
         The signal that will be shifted to syncronize with signal 1.
-    time : ndarray
-        Time
+    time : ndarray, shape(n,)
+        The time vector for the two signals
 
     Returns
     -------
@@ -315,7 +342,7 @@ def sync_error(tau, signal1, signal2, time):
 
     return error
 
-def find_timeshift(niAcc, vnAcc, sampleRate, speed):
+def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     '''Returns the timeshift, tau, of the VectorNav [VN] data relative to the
     National Instruments [NI] data.
 
@@ -378,7 +405,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     # get an initial guess for the time shift based on the bump indice
     guess = (niBump[1] - vnBump[1]) / float(sampleRate)
 
-    # find the section that the bump belongs to
+    # find the section that the bump belongs to (vnSig may have nans)
     indices, arrays = split_around_nan(vnSig)
     for pair in indices:
         if pair[0] <= vnBump[1] < pair[1]:
@@ -398,10 +425,17 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed):
     # set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 0.5 seconds
-    tauRange = np.linspace(0., .5, num=500)
+    tauRange = np.linspace(0., 2., num=500)
     error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
         error[i] = sync_error(val, niBumpSec, vnBumpSec, timeBumpSec)
+
+    if plotError:
+        plt.figure()
+        plt.plot(tauRange, error)
+        plt.xlabel('tau')
+        plt.ylabel('error')
+        plt.show()
 
     # find initial condition from landscape
     tau0 = tauRange[np.argmin(error)]
@@ -503,7 +537,3 @@ def yaw_roll_pitch_rate(angularRateX, angularRateY, angularRateZ,
                  angularRateZ * np.cos(lam) * np.tan(rollAngle))
 
     return yawRate, rollRate, pitchRate
-
-def steer_rate(forkRate, angularRateZ):
-    '''Returns the steer rate.'''
-    return forkRate - angularRateZ
