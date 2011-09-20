@@ -51,10 +51,12 @@ First load the database as read-only::
 
 Now load a run::
 
-    >>> run = bdp.Run('00105', database, forceRecalc=True, filterSigs=True)
+    >>> run = bdp.Run('00105', database, <pathToParameterData>, filterSigs=True)
 
-Currently the `forceRecalc` argument must be true. The `filterSigs` will apply a
-filter to the signals to remove some of the noise, it is optional.
+The `<pathToParameterData>` needs to point to the data directory associated
+with the BicycleParameters module and should contain Jason and the Rigd
+bicycle. The `filterSigs` will apply a filter to the signals to remove some of
+the noise, it is optional.
 
 Check to make sure the data was properly time synchronized::
 
@@ -108,14 +110,22 @@ BicycleDAQ_. BicycleDAQ_ stores the raw data as matlab matfiles. These need to b
 converted to equivalent HDF5 files to be able to load into the master database
 file. Use the m-file `tools/fill_h5.m` to convert the runs and calibration data
 into HDF5 files. Then use this module to create the database and fill it with
-the data::
-
-    >>> import bicycledataprocessor.main as bdp
-
-First create an empty database file in the current directory.::
+the data. First create an empty database file in the current directory.::
 
     >>> bdp.create_database()
 
 Now, fill the database with the data.::
 
     >>> bdp.fill_tables()
+
+Warnings
+========
+- The roll angle is not guaranteed to be calibrated in some of the early
+  pavillion runs. Check this.
+- The system currently only loads Jason onto the bicycle. This shouldn't affect
+  anything major on runs with Charlie and Luke, but there are some small
+  discrepancies.
+- The current pavilion runs with Luke and Charlie are mostly corrupt, be ware.
+- The yaw angle and lateral deviation values depend on integrating the yaw
+  rate. This seems to work for runs that have signals centered around zero, but
+  are definitely wrong for others. (There are plans to fix this for all runs.)

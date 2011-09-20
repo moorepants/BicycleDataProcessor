@@ -509,7 +509,7 @@ class Sensor():
 class Run():
     """The fundamental class for a run."""
 
-    def __init__(self, runid, database, forceRecalc=False, filterSigs=False):
+    def __init__(self, runid, database, pathToParameterData, forceRecalc=True, filterSigs=False):
         """
         Loads all the data for a run if available otherwise it generates the
         data from the raw data.
@@ -522,6 +522,9 @@ class Run():
         database : pytable object of an hdf5 file
             This file must contain the run data table and the calibration data
             table.
+        pathToParameterData : string
+            The is the path to the data directory for the BicycleParameters
+            package.
         forceRecalc : boolean, optional
             If true then it will force a recalculation of all the the non-raw
             data.
@@ -567,10 +570,8 @@ class Run():
         # this code will not work for other bicycle/rider combinations. it will
         # need to be updated
         bicycles = {'Rigid Rider': 'Rigid'}
-        pathToData = ('/media/Data/Documents/School/UC Davis/' +
-                          'Bicycle Mechanics/BicycleParameters/data')
         self.bicycle = bp.Bicycle(bicycles[self.metadata['Bicycle']],
-                                  pathToData=pathToData, forceRawCalc=True)
+                                  pathToData=pathToParameterData, forceRawCalc=True)
         self.bicycle.add_rider('Jason', reCalc=True)
         self.bikeParameters =\
             bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
