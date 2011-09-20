@@ -591,7 +591,7 @@ class Run():
                 self.calibratedSignals['AccelerometerAccelerationY'],
                 self.calibratedSignals['AccelerationZ'],
                 self.metadata['NISampleRate'],
-                self.metadata['Speed'], plotError=True)
+                self.metadata['Speed'], plotError=False)
 
             # truncate and spline all of the calibrated signals
             for name, sig in self.calibratedSignals.items():
