@@ -129,3 +129,6 @@ Warnings
 - The yaw angle and lateral deviation values depend on integrating the yaw
   rate. This seems to work for runs that have signals centered around zero, but
   are definitely wrong for others. (There are plans to fix this for all runs.)
+- I may have an error in my forward speed calibration (and possible wheel
+  rate). The speeds seem to be 2 to 3 meters/second higher than what the
+  treadmill output was.
