@@ -825,15 +825,9 @@ class Run():
             self.computedSignals['ForwardSpeed'].units = 'meter/second'
             self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
 
-    def compute_pull_force(self, fromLeft=True):
+    def compute_pull_force(self):
         """
         Computes the pull force from the truncated pull force signal.
-
-        Parameters
-        ----------
-        fromLeft : boolean, optional
-            If true the pull is assumed to be from the left side of the
-            bicycle.
 
         """
         try:
@@ -842,13 +836,8 @@ class Run():
             print 'PullForce was not available. PullForce was not computed.'
         else:
             pullForce = pullForce.convert_units('newton')
-
-            if fromLeft:
-                pullForce = -pullForce
-
             pullForce.name = 'PullForce'
             pullForce.units = 'newton'
-
             self.computedSignals[pullForce.name] = pullForce
 
     def __str__(self):
