@@ -732,6 +732,7 @@ class Run():
             # them still
             damping = 0.3475
             friction = 0.0861
+            # this should be auto computed...
             d = 0.0244135366294 # this is calculated with BicycleParameters
             ds = np.array([0.1349375, 0., -0.3603625]) # i measured these
         except AttributeError:
@@ -938,6 +939,9 @@ Notes: {6}'''.format(
         plt.grid()
 
         plt.show()
+
+    def verify_time_sync(self):
+        self.plot('-AccelerometerAccelerationY', 'AccelerationZ', signalType="truncated")
 
     def video(self):
         '''
