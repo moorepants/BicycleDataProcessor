@@ -565,16 +565,10 @@ class Run():
         for col in rawDataCols:
             self.rawSignals[col] = RawSignal(runid, col, database)
 
-        print "Loading the bicycle and rider data."
-        # load the parameters for the bicycle
-        # this code will not work for other bicycle/rider combinations. it will
-        # need to be updated
-        bicycles = {'Rigid Rider': 'Rigid'}
-        self.bicycle = bp.Bicycle(bicycles[self.metadata['Bicycle']],
-                                  pathToData=pathToParameterData, forceRawCalc=True)
-        self.bicycle.add_rider('Jason', reCalc=True)
-        self.bikeParameters =\
-            bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
+        print("Loading the bicycle and rider data for " +
+              "{} on {}".format(self.metadata['Rider'],
+              self.metadata['Bicycle']))
+        self.load_rider(pathToParameterData)
 
         if forceRecalc == True:
             print "Computing signals from raw data."
@@ -666,7 +660,7 @@ class Run():
         try:
             yawAngle = self.computedSignals['YawAngle']
             rearWheelRate = self.truncatedSignals['RearWheelRate']
-            rR = self.bikeParameters['rR'] # this should be in meters
+            rR = self.bicycleRiderParameters['rR'] # this should be in meters
         except AttributeError:
             print('Either the yaw angle, rear wheel rate or ' +
                   'front wheel radius is not available. The ' +
@@ -724,7 +718,7 @@ class Run():
             steerAngle = self.truncatedSignals['SteerAngle']
             steerColumnTorque =\
                 self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
-            handlebarMass = self.bikeParameters['mG']
+            handlebarMass = self.bicycleRiderParameters['mG']
             handlebarInertia =\
                 self.bicycle.steer_assembly_moment_of_inertia(fork=False,
                     wheel=False, nominal=True)
@@ -769,7 +763,7 @@ class Run():
             omegaY = self.truncatedSignals['AngularRateY']
             omegaZ = self.truncatedSignals['AngularRateZ']
             rollAngle = self.truncatedSignals['RollAngle']
-            lam = self.bikeParameters['lam']
+            lam = self.bicycleRiderParameters['lam']
         except AttributeError:
             print('All needed signals are not available. ' +
                   'Yaw, roll and pitch rates were not computed.')
@@ -814,7 +808,7 @@ class Run():
         center of the rear wheel."""
 
         try:
-            rR = self.bikeParameters['rR']
+            rR = self.bicycleRiderParameters['rR']
             rearWheelRate = self.truncatedSignals['RearWheelRate']
         except AttributeError:
             print('rR or RearWheelRate is not availabe. ' +
@@ -882,12 +876,36 @@ Notes: {6}'''.format(
             exportData = {}
             exportData.update(self.metadata)
             exportData.update(self.computedSignals)
-            exportData.update(self.bikeParameters)
+            exportData.update(self.bicycleRiderParameters)
             filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
             io.savemat(os.path.join(fullDir, filename), exportData)
         else:
             raise NotImplementedError(('{0} method is not available' +
                                       ' yet.').format(filetype))
+
+    def load_rider(self, pathToParameterData):
+        """Creates a bicycle/rider attribute which contains the physical
+        parameters for the bicycle and rider for this run."""
+
+        # currently this isn't very generic, it only assumes that there was
+        # Luke, Jason, and Charlie riding on the instrumented bicycle.
+        rider = self.metadata['Rider']
+        if rider == 'Charlie' or rider == 'Luke':
+            # Charlie and Luke rode the bike in the same configuration
+            bicycle = 'Rigidcl'
+        elif rider == 'Jason' :
+            bicycle = 'Rigid'
+        else:
+            raise StandardError('There are no bicycle parameters ' +
+                    'for {}'.format(rider))
+
+        # force a recalculation (but not the period calcs, they take too long)
+        self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData,
+                forceRawCalc=True)
+        # force a recalculation of the human parameters
+        self.bicycle.add_rider(rider, reCalc=True)
+        self.bicycleRiderParameters =\
+            bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
     def plot(self, *args, **kwargs):
         '''
@@ -1086,3 +1104,4 @@ def create_html_tables(database, directory='docs/tables'):
     f = open(os.path.join(directory, 'CalibrationTable.html'), 'w')
     f.writelines(lines)
     f.close()
+
