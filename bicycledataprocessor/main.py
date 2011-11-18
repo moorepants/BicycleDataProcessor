@@ -722,13 +722,26 @@ class Run():
             handlebarInertia =\
                 self.bicycle.steer_assembly_moment_of_inertia(fork=False,
                     wheel=False, nominal=True)
+            # this is the distance from the handlebar center of mass to the
+            # steer axis
+            w = self.bicycleRiderParameters['w']
+            c = self.bicycleRiderParameters['c']
+            lam = self.bicycleRiderParameters['lam']
+            xG = self.bicycleRiderParameters['xG']
+            zG = self.bicycleRiderParameters['zG']
+            handlebarCoM = np.array([xG, 0., zG])
+            d = bp.geometry.distance_to_steer_axis(w, c, lam,
+                    handlebarCoM)
+            # these are the distances from the point on the steer axis which is
+            # aligned with the handlebar center of mass to the accelerometer on
+            # the frame
+            ds1 = self.bicycle.parameters['Measured']['ds1']
+            ds3 = self.bicycle.parameters['Measured']['ds3']
+            ds = np.array([ds1, 0., ds3]) # i measured these
             # damping and friction values come from Peter's work, I need to verify
             # them still
             damping = 0.3475
             friction = 0.0861
-            # this should be auto computed...
-            d = 0.0244135366294 # this is calculated with BicycleParameters
-            ds = np.array([0.1349375, 0., -0.3603625]) # i measured these
         except AttributeError:
             print('All signals were not available. SteerTorque was not ' +
                   'computed.')
