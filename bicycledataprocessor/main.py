@@ -509,7 +509,8 @@ class Sensor():
 class Run():
     """The fundamental class for a run."""
 
-    def __init__(self, runid, database, pathToParameterData, forceRecalc=True, filterSigs=False):
+    def __init__(self, runid, database, pathToParameterData, forceRecalc=True,
+            filterFreq=None):
         """
         Loads all the data for a run if available otherwise it generates the
         data from the raw data.
@@ -618,13 +619,14 @@ class Run():
             self.compute_wheel_contact_rates()
             self.compute_wheel_contact_points()
 
-            if filterSigs:
-                # filter all the computed signals
-                for k, v in self.computedSignals.items():
-                    self.computedSignals[k] = v.filter(30.)
-
             print('Extracting the task portion from the data.')
             self.extract_task()
+
+            print('Filtering the task signals.')
+            if filterFreq is not None:
+                # filter all the computed signals
+                for k, v in self.taskSignals.items():
+                    self.taskSignals[k] = v.filter(filterFreq)
 
         else:
             raise NotImplementedError
