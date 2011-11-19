@@ -570,6 +570,8 @@ class Run():
               self.metadata['Bicycle']))
         self.load_rider(pathToParameterData)
 
+        self.bumpLength = 1.0
+
         if forceRecalc == True:
             print "Computing signals from raw data."
 
@@ -620,7 +622,12 @@ class Run():
                 # filter all the computed signals
                 for k, v in self.computedSignals.items():
                     self.computedSignals[k] = v.filter(30.)
+
+            print('Extracting the task portion from the data.')
+            self.extract_task()
+
         else:
+            raise NotImplementedError
             # else just get the values stored in the database
             print "Loading computed signals from database."
             for col in computedCols:
@@ -852,20 +859,15 @@ class Run():
         '''Prints basic run information to the screen.'''
 
         line = "=" * 79
-        info = '''Run # {0}
-Environment: {1}
-Rider: {2}
-Bicycle: {3}
-Speed: {4}
-Maneuver: {5}
-Notes: {6}'''.format(
-        self.metadata['RunID'],
-        self.metadata['Environment'],
-        self.metadata['Rider'],
-        self.metadata['Bicycle'],
-        self.metadata['Speed'],
-        self.metadata['Maneuver'],
-        self.metadata['Notes'])
+        info = 'Run # {0}\nEnvironment: {1}\nRider: {2}\nBicycle: {3}\nSpeed:'\
+            '{4}\nManeuver: {5}\nNotes: {6}'.format(
+            self.metadata['RunID'],
+            self.metadata['Environment'],
+            self.metadata['Rider'],
+            self.metadata['Bicycle'],
+            self.metadata['Speed'],
+            self.metadata['Maneuver'],
+            self.metadata['Notes'])
 
         return line + '\n' + info + '\n' + line
 
@@ -888,13 +890,54 @@ Notes: {6}'''.format(
                 os.makedirs(fullDir)
             exportData = {}
             exportData.update(self.metadata)
-            exportData.update(self.computedSignals)
-            exportData.update(self.bicycleRiderParameters)
+            exportData.update(self.taskSignals)
             filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
             io.savemat(os.path.join(fullDir, filename), exportData)
         else:
             raise NotImplementedError(('{0} method is not available' +
                                       ' yet.').format(filetype))
+
+    def extract_task(self):
+        """Slices the computed signals such that data before the end of the
+        bump is removed and unusable trailng data is removed.
+
+        """
+        # get the z acceleration from the VN-100
+        acc = self.truncatedSignals['AccelerationZ'].filter(50.)
+        # find the mean speed during the task (look at one second in the middle
+        # of the data)
+        speed = self.computedSignals['ForwardSpeed']
+        meanSpeed = speed[len(speed) / 2 - 100:len(speed) / 2 + 100].mean()
+        wheelbase = self.bicycleRiderParameters['w']
+        # find the bump
+        indices = find_bump(acc, acc.sampleRate, meanSpeed, wheelbase,
+                self.bumpLength)
+
+
+        # if it is a pavilion run, then clip the end too
+        # these are the runs that the length of track method of clipping
+        # applies to
+        straight = ['Track Straight Line With Disturbance',
+                    'Balance With Disturbance',
+                    'Balance',
+                    'Track Straight Line']
+        if (self.metadata['Environment'] == 'Pavillion Floor' and
+            self.metadata['Maneuver'] in straight):
+
+            # this is based on the length of the track in the pavilion that we
+            # measured on September 21st, 2011
+            trackLength = 32. - wheelbase - self.bumpLength
+            end = trackLength / meanSpeed * acc.sampleRate
+
+            # i may need to clip the end based on the forward speed dropping
+            # below certain threshold around the mean
+        else:
+            # if it isn't a pavilion run, don't clip the end
+            end = -1
+
+        self.taskSignals = {}
+        for name, sig in self.computedSignals.items():
+            self.taskSignals[name] = sig[indices[2]:end]
 
     def load_rider(self, pathToParameterData):
         """Creates a bicycle/rider attribute which contains the physical
@@ -929,37 +972,46 @@ Notes: {6}'''.format(
         signalName : string
             These should be strings that correspond to the signals available in
             the computed data. If the first character of the string is `-` then
-            the negative signal will be plotted.
+            the negative signal will be plotted. You can also scale the values
+            so by adding a value and an ``*`` such as: ``'-10*RollRate'. The
+            negative sign always has to come first.
         signalType : string, optional
             This allows you to plot from the other signal types. Options are
-            'computed', 'truncated', 'calibrated', 'raw'.
+            'task', 'computed', 'truncated', 'calibrated', 'raw'. The default
+            is 'task'.
 
         '''
         if not kwargs:
-            kwargs = {'signalType': 'computed'}
-
-        # this currently only works if the sample rates from both sources is
-        # the same
+            kwargs = {'signalType': 'task'}
 
         mapping = {'computed': self.computedSignals,
                    'truncated': self.truncatedSignals,
                    'calibrated': self.calibratedSignals,
-                   'raw': self.rawSignals}
+                   'raw': self.rawSignals,
+                   'task': self.taskSignals}
 
         leg = []
         for i, arg in enumerate(args):
             legName = arg
             sign = 1.
-            if arg[0] == '-':
+            # if a negative sign is present
+            if '-' in arg and arg[0] != '-':
+                raise ValueError('{} is incorrectly typed'.format(arg))
+            elif '-' in arg and arg[0] == '-':
                 arg = arg[1:]
                 sign = -1.
-            signal = sign * mapping[kwargs['signalType']][arg]
+            # if a multiplication factor is present
+            if '*' in arg:
+                mul, arg = arg.split('*')
+            else:
+                mul = 1.
+            signal = sign * float(mul) * mapping[kwargs['signalType']][arg]
             plt.plot(signal.time(), signal)
             leg.append(legName + ' [' + mapping[kwargs['signalType']][arg].units + ']')
 
         plt.legend(leg)
-
-        plt.title('Rider: ' + self.metadata['Rider'] +
+        runid = pad_with_zeros(str(self.metadata['RunID']), 5)
+        plt.title('Run: ' + runid + ', Rider: ' + self.metadata['Rider'] +
                   ', Speed: ' + str(self.metadata['Speed']) + 'm/s' +
                   ', Maneuver: ' + self.metadata['Maneuver'] +
                   ', Environment: ' + self.metadata['Environment'] + '\n' +
@@ -972,6 +1024,10 @@ Notes: {6}'''.format(
         plt.show()
 
     def verify_time_sync(self):
+        """Shows a plot of the acceleration signals that were used to
+        syncronize the NI and VN data. If it doesn't show a good fit, then
+        something is wrong."""
+
         self.plot('-AccelerometerAccelerationY', 'AccelerationZ', signalType="truncated")
 
     def video(self):
@@ -980,7 +1036,7 @@ Notes: {6}'''.format(
 
         '''
         # get the 5 digit string version of the run id
-        runid = pad_with_zeros(str(self.data['RunID']), 5)
+        runid = pad_with_zeros(str(self.metadata['RunID']), 5)
         viddir = os.path.join('..', 'Video')
         abspath = os.path.abspath(viddir)
         # check to see if there is a video for this run
@@ -989,7 +1045,6 @@ Notes: {6}'''.format(
             os.system('vlc "' + path + '"')
         else:
             print "No video for this run"
-
 
 def matlab_date_to_object(matDate):
     '''Returns a date time object based on a Matlab `datestr()` output.
