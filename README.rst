@@ -54,9 +54,9 @@ Now load a run::
     >>> run = bdp.Run('00105', database, <pathToParameterData>, filterSigs=True)
 
 The `<pathToParameterData>` needs to point to the data directory associated
-with the BicycleParameters module and should contain Jason and the Rigd
-bicycle. The `filterSigs` will apply a filter to the signals to remove some of
-the noise, it is optional.
+with the BicycleParameters module and should contain Jason, Luke, Charlie and
+the Rigid and Rigidcl bicycles. The `filterSigs` will apply a filter to the
+signals to remove some of the noise, it is optional.
 
 Check to make sure the data was properly time synchronized::
 
@@ -93,9 +93,13 @@ The data for each computed signal is also stored in a dictionary::
 
     >>> run.computedSignals
 
-The computedSignals can be plotted::
+The data for each task signal is also stored in a dictionary::
 
-    >>> run.computedSignals.keys() # see a list of options
+    >>> run.taskSignals
+
+The taskSignals can be plotted::
+
+    >>> run.taskSignals.keys() # see a list of options
     >>> run.plot('SteerAngle', 'RollAngle', 'PullForce')
 
 Export the computed signals as a mat file with::
@@ -120,15 +124,10 @@ Now, fill the database with the data.::
 
 Warnings
 ========
+
 - The roll angle is not guaranteed to be calibrated in some of the early
   pavillion runs. Check this.
-- The system currently only loads Jason onto the bicycle. This shouldn't affect
-  anything major on runs with Charlie and Luke, but there are some small
-  discrepancies.
-- The current pavilion runs with Luke and Charlie are mostly corrupt, be ware.
+- The first set of pavilion runs with Luke and Charlie are mostly corrupt, beware.
 - The yaw angle and lateral deviation values depend on integrating the yaw
   rate. This seems to work for runs that have signals centered around zero, but
   are definitely wrong for others. (There are plans to fix this for all runs.)
-- I may have an error in my forward speed calibration (and possible wheel
-  rate). The speeds seem to be 2 to 3 meters/second higher than what the
-  treadmill output was.
