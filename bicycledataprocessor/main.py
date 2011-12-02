@@ -284,19 +284,19 @@ class RawSignal(Signal):
         """
 
         # get the tables
-        dTab = database.root.data.datatable
-        sTab = database.root.data.signaltable
-        cTab = database.root.data.calibrationtable
+        rTab = database.root.runTable
+        sTab = database.root.signalTable
+        cTab = database.root.calibrationTable
 
         # get the row number for this particular run id
-        rownum = get_row_num(runid, dTab)
-        signal = get_cell(dTab, signalName, rownum)
+        rownum = get_row_num(runid, rTab)
+        signal = database.getNode('/rawData/' + runid, name=signalName).read()
 
         # cast the input array into my subclass of ndarray
         obj = np.asarray(signal).view(cls)
 
         obj.runid = runid
-        obj.timeStamp = matlab_date_to_object(get_cell(dTab, 'DateTime',
+        obj.timeStamp = matlab_date_to_object(get_cell(rTab, 'DateTime',
             rownum))
         obj.calibrationType, obj.units, obj.source = [(row['calibration'],
             row['units'], row['source'])
@@ -317,7 +317,8 @@ class RawSignal(Signal):
                 obj.supply = [row['runSupplyVoltage']
                                for row in cTab.where('name == signalName')][0]
             else:
-                obj.supply = get_cell(dTab, supplySource, rownum)
+                obj.supply = database.getNode('/rawData/' + runid,
+                        name=supplySource).read()
         except IndexError:
             print "{0} does not have a supply voltage.".format(signalName)
             print "-" * 79
@@ -330,7 +331,7 @@ class RawSignal(Signal):
         else:
             raise ValueError('{0} is not a valid source.'.format(obj.source))
 
-        obj.sampleRate = dTab[rownum][dTab.colnames.index(sampRateCol)]
+        obj.sampleRate = rTab[rownum][rTab.colnames.index(sampRateCol)]
 
         return obj
 
@@ -536,8 +537,8 @@ class Run():
 
         print "Initializing the run object."
         # get the tables
-        dataTable = database.root.data.datatable
-        signalTable = database.root.data.signaltable
+        dataTable = database.root.runTable
+        signalTable = database.root.signalTable
 
         # get the row number for this particular run id
         rownum = get_row_num(runid, dataTable)
@@ -564,7 +565,12 @@ class Run():
 
         print "Loading the raw signals from the database."
         for col in rawDataCols:
-            self.rawSignals[col] = RawSignal(runid, col, database)
+            # rawDataCols includes all possible raw signals, but every run
+            # doesn't have all the signals, so skip the ones that aren't there
+            try:
+                self.rawSignals[col] = RawSignal(runid, col, database)
+            except tables.NoSuchNodeError:
+                pass
 
         print("Loading the bicycle and rider data for " +
               "{} on {}".format(self.metadata['Rider'],
@@ -1104,7 +1110,7 @@ def create_html_tables(database, directory='docs/tables'):
         os.makedirs(directory)
 
     # make a run table
-    dTab = database.root.data.datatable
+    dTab = database.root.runTable
 
     # only write these columns
     cols = ['DateTime',
@@ -1135,7 +1141,7 @@ def create_html_tables(database, directory='docs/tables'):
     f.writelines(lines)
     f.close()
 
-    sTab = database.root.data.signaltable
+    sTab = database.root.signalTable
     lines = ['<table border="1">\n<tr>\n']
     for col in sTab.colnames:
         lines.append("<th>" + col + "</th>\n")
@@ -1154,7 +1160,7 @@ def create_html_tables(database, directory='docs/tables'):
     f.writelines(lines)
     f.close()
 
-    cTab = database.root.data.calibrationtable
+    cTab = database.root.calibrationTable
     lines = ['<table border="1">\n<tr>\n']
     for col in cTab.colnames:
         if col not in ['v', 'x', 'y']:
