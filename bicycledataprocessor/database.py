@@ -7,7 +7,416 @@ from operator import xor
 
 # dependencies
 import numpy as np
-import tables as tab
+import tables as tables
+
+class DataSet(object):
+
+    def __init__(self, fileName='test.h5', pathToH5='../BicycleDAQ/data/h5'):
+        """Creates the object and sets the filename.
+
+        Parameters
+        ----------
+        fileName : string
+            Path to the database file.
+        pathToH5 : string
+            Path to the directory containing the run h5 files.
+
+        """
+
+        self.fileName = fileName
+        self.pathToH5 = pathToH5
+        self.pathToCalibH5 = os.path.join(self.pathToH5, 'CalibData', 'h5')
+
+        # these columns may be used in the future but for now there is no reason to
+        # introduce them into the database
+        self.ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
+            [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
+            [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
+            'Left'], ['1', '2', '2', '1'])])
+
+        # these are data signals that will be created from the raw data
+        self.processedCols = ['FrameAccelerationX',
+                              'FrameAccelerationY',
+                              'FrameAccelerationZ',
+                              'PitchRate',
+                              'PullForce',
+                              'RearWheelRate',
+                              'RollAngle',
+                              'RollRate',
+                              'ForwardSpeed',
+                              'SteerAngle',
+                              'SteerRate',
+                              'SteerTorque',
+                              'tau',
+                              'YawRate']
+
+    def open(self, **kwargs):
+        """Opens the HDF5 database. This accepts any keyword arguments that
+        tables.openFile uses."""
+
+        self.database = tables.openFile(self.fileName, **kwargs)
+
+    def close(self):
+        """Closes the currently open HDF5 database."""
+
+        try:
+            self.database.close()
+            del self.database
+        except AttributeError:
+            print('The database is not open.')
+
+    def create_run_table(self):
+        """Creates an empty run information table.
+
+        Notes
+        -----
+        The database must be open with write permission.
+
+        """
+
+        numRuns = len(sorted(os.listdir(self.pathToH5)))
+
+        # get two example runs
+        filteredRun, unfilteredRun = get_two_runs(self.pathToH5)
+
+        # generate the table description class
+        RunTable = self.run_table_class(unfilteredRun)
+
+        # add the data table to the root group
+        rTable = self.database.createTable('/', 'runTable',
+            RunTable, 'Run Information', expectedrows=(numRuns + 50))
+
+        rTable.flush()
+
+    def create_signal_table(self):
+        """Creates an empty signal information table.
+
+        Notes
+        -----
+        The database must be open with write permission.
+
+        """
+
+        # generate the signal table description class
+        SignalTable = self.create_signal_table_class()
+
+        # add the signal table to the root group
+        sTable = self.database.createTable('/', 'signalTable',
+                                  SignalTable, 'Signal Information',
+                                  expectedrows=50)
+
+        sTable.flush()
+
+    def create_calibration_table(self):
+        """Creates an empty calibration table.
+
+        Notes
+        -----
+        The database must be open with write permission.
+
+        """
+
+        numCalibs = len(sorted(os.listdir(self.pathToCalibH5)))
+
+        # generate the calibration table description class
+        calibrationTable = self.create_calibration_table_class()
+
+        # add the calibration table to the root group
+        cTable = self.database.createTable('/', 'calibrationTable',
+            calibrationTable, 'Calibration Information',
+            expectedrows=(numCalibs + 10))
+
+        cTable.flush()
+
+    def create_database(self, compression=False):
+        """Creates an HDF5 file for data collected from the instrumented
+        bicycle.
+
+        Parameters
+        ----------
+        compression : boolean, optional
+            Basic compression will be used in the creation of the objects in
+            the database.
+
+        """
+
+        if os.path.exists(self.fileName):
+            response = raw_input(('{0} already exists.\n' +
+                'Do you want to overwrite it? (y or n)\n').format(self.fileName))
+            if response == 'y':
+                print("{0} will be overwritten".format(self.fileName))
+            else:
+                print("{0} was not overwritten.".format(self.fileName))
+                return
+
+        print("Creating database...")
+
+        self.compression = compression
+
+        # create a new hdf5 file ready for writing
+        self.openFile(mode='w', title='Instrumented Bicycle Data')
+
+        # initialize all of the tables
+        self.initialize_run_table()
+        self.initialize_signal_table()
+        self.initialize_calibration_table()
+
+        self.close()
+
+        print "{0} successfully created.".format(self.fileName)
+
+    def signal_table_class(self):
+        """Creates a class that is used to describe the table containing
+        information about the signals.
+
+        Returns
+        -------
+        CalibrationTable : class
+            Table description class for pytables with columns defined.
+
+        """
+
+        class SignalTable(tables.IsDescription):
+            calibration = tables.StringCol(20)
+            isRaw = tables.BoolCol()
+            sensor = tables.StringCol(20)
+            signal = tables.StringCol(20)
+            source = tables.StringCol(2)
+            units = tables.StringCol(20)
+
+        return SignalTable
+
+    def calibration_table_class(self):
+        """Creates a class that is used to describe the table containing the
+        calibration data.
+
+        Returns
+        -------
+        CalibrationTable : class
+            Table description class for pytables with columns defined.
+
+        """
+
+        class CalibrationTable(tables.IsDescription):
+            accuracy = tables.StringCol(10)
+            bias = tables.Float32Col(dflt=np.nan)
+            calibrationID = tables.StringCol(5)
+            calibrationSupplyVoltage = tables.Float32Col(dflt=np.nan)
+            name = tables.StringCol(20)
+            notes = tables.StringCol(500)
+            offset = tables.Float32Col(dflt=np.nan)
+            runSupplyVoltage = tables.Float32Col(dflt=np.nan)
+            runSupplyVoltageSource = tables.StringCol(10)
+            rsq = tables.Float32Col(dflt=np.nan)
+            sensorType = tables.StringCol(20)
+            signal = tables.StringCol(26)
+            slope = tables.Float32Col(dflt=np.nan)
+            timeStamp = tables.StringCol(21)
+            units = tables.StringCol(20)
+            v = tables.Float32Col(shape=(50,))
+            x = tables.Float32Col(shape=(50,))
+            y = tables.Float32Col(shape=(50,))
+
+        return CalibrationTable
+
+    def run_table_class(self, run):
+        '''Returns a class that is used for the table description for raw data
+        for each run.
+
+        Parameters
+        ----------
+        run : dict
+            Contains the python dictionary of a run.
+
+        Returns
+        -------
+        RunTable : class
+            Table description class for pytables with columns defined.
+
+        '''
+
+        # set up the table description
+        class RunTable(tables.IsDescription):
+            for i, (key, val) in enumerate(run['par'].items()):
+                if isinstance(val, type(1)):
+                    exec(key + " = tables.Int32Col(pos=i)")
+                elif isinstance(val, type('')):
+                    exec(key + " = tables.StringCol(itemsize=300, pos=i)")
+                elif isinstance(val, type(1.)):
+                    exec(key + " = tables.Float32Col(pos=i)")
+                elif isinstance(val, type(np.ones(1))):
+                    exec(key + " = tables.Float32Col(shape=(" + str(len(val)) +
+                            ", ), pos=i)")
+
+            # get rid intermediate variables so they are not stored in the class
+            del(i, key, val)
+
+        return RunTable
+
+    def fill_signal_table(self):
+        """Writes data to the signal information table."""
+
+        # this needs a check to see if there is data already in the table with
+        # the option to overwrite it
+
+        print "Loading signal data."
+
+        self.openFile(mode='a')
+
+        # fill in the signal table
+        signalTable = self.database.root.signalTable
+        row = signalTable.row
+
+        # get two example runs
+        filteredRun, unfilteredRun = get_two_runs(self.pathToH5)
+
+        # remove the bridge signals (I haven't used them yet!)
+        niCols = filteredRun['NICols']
+        for col in self.ignoredNICols:
+            niCols.remove(col)
+
+        # combine the VNavCols from unfiltered and filtered
+        vnCols = set(filteredRun['VNavCols'] + unfilteredRun['VNavCols'])
+
+        vnUnitMap = {'MagX': 'unitless',
+                     'MagY': 'unitless',
+                     'MagZ': 'unitless',
+                     'AccelerationX': 'meter/second/second',
+                     'AccelerationY': 'meter/second/second',
+                     'AccelerationZ': 'meter/second/second',
+                     'AngularRateX': 'radian/second',
+                     'AngularRateY': 'radian/second',
+                     'AngularRateZ': 'radian/second',
+                     'AngularRotationX': 'degree',
+                     'AngularRotationY': 'degree',
+                     'AngularRotationZ': 'degree',
+                     'Temperature': 'kelvin'}
+
+        for sig in set(niCols + list(vnCols) + self.processedCols):
+            row['signal'] = sig
+
+            if sig in niCols:
+                row['source'] = 'NI'
+                row['isRaw'] = True
+                row['units'] = 'volts'
+                if sig.startswith('FrameAccel') or sig == 'SteerRateGyro':
+                    row['calibration'] = 'bias'
+                elif sig.endswith('Potentiometer'):
+                    row['calibration'] = 'interceptStar'
+                elif sig in ['WheelSpeedMotor', 'SteerTorqueSensor',
+                             'PullForceBridge']:
+                    row['calibration'] = 'intercept'
+                elif sig[:-1].endswith('Bridge'):
+                    row['calibration'] = 'matrix'
+                else:
+                    row['calibration'] = 'none'
+            elif sig in vnCols:
+                row['source'] = 'VN'
+                row['isRaw'] = True
+                row['calibration'] = 'none'
+                row['units'] = vnUnitMap[sig]
+            elif sig in self.processedCols:
+                row['source'] = 'NA'
+                row['isRaw'] = False
+                row['calibration'] = 'na'
+            else:
+                raise KeyError('{0} is not raw or processed'.format(sig))
+
+            row.append()
+
+        signalTable.flush()
+
+        self.close()
+
+    def fill_calibration_table(self):
+        """Writes the calibration data to the calibration table."""
+
+        print "Loading calibration data."
+
+        self.openFile(mode='a')
+
+        # fill in the calibration table
+        calibrationTable = self.database.root.calibrationTable
+        row = calibrationTable.row
+
+        # load the files from the h5 directory
+        files = sorted(os.listdir(self.pathToCalibH5))
+
+        for f in files:
+            print "Calibration file:", f
+            calibDict = get_calib_data(os.path.join(self.pathToCalibH5, f))
+            for k, v in calibDict.items():
+                if k in ['x', 'y', 'v']:
+                    row[k] = size_vector(v, 50)
+                else:
+                    row[k] = v
+            row.append()
+
+        calibrationTable.flush()
+
+        self.close()
+
+    def fill_run_table(self):
+        """Adds all the data from the hdf5 files in the h5 directory to the run
+        information table and stores the time series data in arrays."""
+
+        print "Loading run data."
+
+        # open the hdf5 file for appending
+        self.openFile(mode='a')
+
+        # get the table and the row object
+        runTable = self.database.root.runTable
+        row = runTable.row
+
+        # load the list of files from the h5 directory
+        files = sorted(os.listdir(self.pathToH5))
+
+        # create a group to store the time series data
+        # if this group already exists you get a NodeError, probably should
+        # allow overwriting or not from user choice or something
+        self.database.createGroup('/', 'rawData')
+
+        # fill the rows with data
+        for rownum, run in enumerate(files):
+            print 'Adding run: %s to row number: %d' % (run, rownum)
+
+            # extract the run ID from the file name
+            runID = run[:-3]
+
+            # loads the raw data for a single run from file
+            rundata = get_run_data(os.path.join(self.pathToH5, run))
+
+            # stick all the metadata in the run info table
+            for par, val in rundata['par'].items():
+                row[par] = val
+            row.append()
+
+            # store the time series data in arrays
+            runGroup = self.database.createGroup(self.database.root.rawData,
+                    runID)
+            for i, col in enumerate(rundata['NICols']):
+                if col not in self.ignoredNICols:
+                    try:
+                        self.database.createArray(runGroup, col,
+                            rundata['NIData'][i])
+                    except IndexError:
+                        print("{} not measured in this run.".format(col))
+
+            for i, col in enumerate(rundata['VNavCols']):
+                self.database.createArray(runGroup, col,
+                        rundata['VNavData'][i])
+
+        runTable.flush()
+
+    def fill_all_tables(self):
+        """Writes data to all of the tables."""
+
+        self.fill_signal_table()
+        self.fill_calibration_table()
+        self.fill_run_table()
+
+        print("{} is ready for action!".format(self.fileName))
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -174,171 +583,6 @@ def size_vector(vector, m):
         raise StandardError("Vector sizing didn't work")
     return newvec
 
-def fill_tables(datafile='InstrumentedBicycleData.h5',
-                pathToData='../BicycleDAQ/data'):
-    '''Adds all the data from the hdf5 files in the h5 directory to the tables.
-
-    Parameters
-    ----------
-    datafile : string
-        Path to the main hdf5 file, typically an empty but structured file:
-        `InstrumentedBicycleData.h5`.
-    pathToData : string
-        Path to the directory containing the raw run data. Both the .mat and
-        .h5 files.
-
-    Examples
-    --------
-    >>>import dataprocessor as dp
-    >>># creates a new database with no data
-    >>>dp.create_database()
-    >>># adds all the data to the database
-    >>>dp.fill_tables()
-
-    '''
-
-    # open the hdf5 file for appending
-    data = tab.openFile(datafile, mode='a')
-    # get the table
-    datatable = data.root.data.datatable
-    # get the row
-    row = datatable.row
-    # load the files from the h5 directory
-    pathToRunH5 = os.path.join(pathToData, 'h5')
-    files = sorted(os.listdir(pathToRunH5))
-
-    print "Loading run data."
-
-    # fill the rows with data
-    for rownum, run in enumerate(files):
-        print 'Adding run: %s to row number: %d' % (run, rownum)
-        rundata = get_run_data(os.path.join(pathToRunH5, run))
-        for par, val in rundata['par'].items():
-            row[par] = val
-        # only take the first 18000 samples for all runs
-        for i, col in enumerate(rundata['NICols']):
-            try:
-                row[col] = size_vector(rundata['NIData'][i], 18000)
-            except KeyError:
-                print "Not including the %s measurement" % col
-            except IndexError:
-                print "%s was not measured" % col
-        for i, col in enumerate(rundata['VNavCols']):
-            row[col] = size_vector(rundata['VNavData'][i], 18000)
-        row.append()
-    datatable.flush()
-
-    print "Loading signal data."
-    # fill in the signal table
-    signaltable = data.root.data.signaltable
-    row = signaltable.row
-
-    # these are data signals that will be created from the raw data
-    processedCols = ['FrameAccelerationX',
-                     'FrameAccelerationY',
-                     'FrameAccelerationZ',
-                     'PitchRate',
-                     'PullForce',
-                     'RearWheelRate',
-                     'RollAngle',
-                     'RollRate',
-                     'ForwardSpeed',
-                     'SteerAngle',
-                     'SteerRate',
-                     'SteerTorque',
-                     'tau',
-                     'YawRate']
-
-    # get two example runs
-    filteredRun, unfilteredRun = get_two_runs(pathToRunH5)
-
-    niCols = filteredRun['NICols']
-    # these columns may be used in the future but for now there is no reason to
-    # introduce them into the database
-    ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
-                     [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
-                     [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
-                         'Left'], ['1', '2', '2', '1'])])
-
-    for col in ignoredNICols:
-        niCols.remove(col)
-
-    # combine the VNavCols from unfiltered and filtered
-    vnCols = set(filteredRun['VNavCols'] + unfilteredRun['VNavCols'])
-
-    vnUnitMap = {'MagX': 'unitless',
-                 'MagY': 'unitless',
-                 'MagZ': 'unitless',
-                 'AccelerationX': 'meter/second/second',
-                 'AccelerationY': 'meter/second/second',
-                 'AccelerationZ': 'meter/second/second',
-                 'AngularRateX': 'radian/second',
-                 'AngularRateY': 'radian/second',
-                 'AngularRateZ': 'radian/second',
-                 'AngularRotationX': 'degree',
-                 'AngularRotationY': 'degree',
-                 'AngularRotationZ': 'degree',
-                 'Temperature': 'kelvin'}
-
-    for sig in set(niCols + list(vnCols) + processedCols):
-        row['signal'] = sig
-
-        if sig in niCols:
-            row['source'] = 'NI'
-            row['isRaw'] = True
-            row['units'] = 'volts'
-            if sig.startswith('FrameAccel') or sig == 'SteerRateGyro':
-                row['calibration'] = 'bias'
-            elif sig.endswith('Potentiometer'):
-                row['calibration'] = 'interceptStar'
-            elif sig in ['WheelSpeedMotor', 'SteerTorqueSensor',
-                         'PullForceBridge']:
-                row['calibration'] = 'intercept'
-            elif sig[:-1].endswith('Bridge'):
-                row['calibration'] = 'matrix'
-            else:
-                row['calibration'] = 'none'
-        elif sig in vnCols:
-            row['source'] = 'VN'
-            row['isRaw'] = True
-            row['calibration'] = 'none'
-            row['units'] = vnUnitMap[sig]
-        elif sig in processedCols:
-            row['source'] = 'NA'
-            row['isRaw'] = False
-            row['calibration'] = 'na'
-        else:
-            raise KeyError('{0} is not raw or processed'.format(sig))
-
-        row.append()
-
-    signaltable.flush()
-
-    print "Loading calibration data."
-    # fill in the calibration table
-    calibrationtable = data.root.data.calibrationtable
-    row = calibrationtable.row
-
-    # load the files from the h5 directory
-    pathToCalibH5 = os.path.join(pathToData, 'CalibData', 'h5')
-    files = sorted(os.listdir(pathToCalibH5))
-
-    for f in files:
-        print "Calibration file:", f
-        calibDict = get_calib_data(os.path.join(pathToCalibH5, f))
-        for k, v in calibDict.items():
-            if k in ['x', 'y', 'v']:
-                row[k] = size_vector(v, 50)
-            else:
-                row[k] = v
-        row.append()
-
-    calibrationtable.flush()
-
-    data.close()
-
-    print datafile, "ready for action!"
-
 def replace_corrupt_strings_with_nan(vnOutput, vnCols):
     '''Returns a numpy matrix with the VN-100 output that has the corrupt
     values replaced by nan values.
@@ -497,183 +741,8 @@ def get_two_runs(pathToH5):
 
 def load_database(filename='InstrumentedBicycleData.h5', mode='r'):
     '''Returns the a pytables database.'''
-    return tab.openFile(filename, mode=mode)
+    return tables.openFile(filename, mode=mode)
 
-def create_database(filename='InstrumentedBicycleData.h5',
-                    pathToH5='../BicycleDAQ/data/h5',
-                    compression=False):
-    '''Creates an HDF5 file for data collected from the instrumented
-    bicycle.'''
-
-    if os.path.exists(filename):
-        response = raw_input(('{0} already exists.\n' +
-            'Do you want to overwrite it? (y or n)\n').format(filename))
-        if response == 'y':
-            print "{0} will be overwritten".format(filename)
-            pass
-        else:
-            print "{0} was not overwritten.".format(filename)
-            return
-
-    print "Creating database..."
-
-    # open a new hdf5 file for writing
-    data = tab.openFile(filename, mode='w',
-                        title='Instrumented Bicycle Data')
-    # create a group for the data
-    rgroup = data.createGroup('/', 'data', 'Data')
-
-    # generate the signal table description class
-    SignalTable = create_signal_table_class()
-    # add the signal table to the group
-    sTable = data.createTable(rgroup, 'signaltable',
-                              SignalTable, 'Signal Information')
-    sTable.flush()
-
-    # generate the calibration table description class
-    CalibrationTable = create_calibration_table_class()
-    # add the calibration table to the group
-    cTable = data.createTable(rgroup, 'calibrationtable',
-                              CalibrationTable, 'Calibration Information')
-    cTable.flush()
-
-    # get two example runs
-    filteredRun, unfilteredRun = get_two_runs(pathToH5)
-    # generate the table description class
-    RunTable = create_run_table_class(filteredRun, unfilteredRun)
-    if compression:
-        # setup up a compression filter
-        fil = tab.Filters(complevel=1, complib='zlib')
-        # add the data table to this group
-        rtable = data.createTable(rgroup, 'datatable',
-                                  RunTable, 'Run Data',
-                                  filters=fil)
-    else:
-        # add the data table to this group
-        rtable = data.createTable(rgroup, 'datatable',
-                                  RunTable, 'Run Data')
-
-    rtable.flush()
-
-    data.close()
-
-    print "{0} successfuly created.".format(filename)
-
-def create_signal_table_class():
-    '''Creates a class that is used to describe the table containing
-    information about the signals.'''
-
-    class SignalTable(tab.IsDescription):
-        calibration = tab.StringCol(20)
-        isRaw = tab.BoolCol()
-        sensor = tab.StringCol(20)
-        signal = tab.StringCol(20)
-        source = tab.StringCol(2)
-        units = tab.StringCol(20)
-
-    return SignalTable
-
-def create_calibration_table_class():
-    '''Creates a class that is used to describe the table containing the
-    calibration data.'''
-
-    class CalibrationTable(tab.IsDescription):
-        accuracy = tab.StringCol(10)
-        bias = tab.Float32Col(dflt=np.nan)
-        calibrationID = tab.StringCol(5)
-        calibrationSupplyVoltage = tab.Float32Col(dflt=np.nan)
-        name = tab.StringCol(20)
-        notes = tab.StringCol(500)
-        offset = tab.Float32Col(dflt=np.nan)
-        runSupplyVoltage = tab.Float32Col(dflt=np.nan)
-        runSupplyVoltageSource = tab.StringCol(10)
-        rsq = tab.Float32Col(dflt=np.nan)
-        sensorType = tab.StringCol(20)
-        signal = tab.StringCol(26)
-        slope = tab.Float32Col(dflt=np.nan)
-        timeStamp = tab.StringCol(21)
-        units = tab.StringCol(20)
-        v = tab.Float32Col(shape=(50,))
-        x = tab.Float32Col(shape=(50,))
-        y = tab.Float32Col(shape=(50,))
-
-    return CalibrationTable
-
-def create_run_table_class(filteredrun, unfilteredrun):
-    '''Returns a class that is used for the table description for raw data
-    for each run.
-
-    Parameters
-    ----------
-    filteredrun : dict
-        Contains the python dictionary of a run with filtered VN-100 data.
-    unfilteredrun : dict
-        Contains the python dictionary of a run with unfiltered VN-100 data.
-
-    Returns
-    -------
-    Run : class
-        Table description class for pytables with columns defined.
-
-    '''
-
-    # combine the VNavCols from unfiltered and filtered
-    VNavCols = set(filteredrun['VNavCols'] + unfilteredrun['VNavCols'])
-
-    # these columns may be used in the future but for now there is no reason to
-    # introduce them into the database
-    ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
-                     [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
-                     [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
-                         'Left'], ['1', '2', '2', '1'])])
-
-    for col in ignoredNICols:
-        unfilteredrun['NICols'].remove(col)
-
-    # set up the table description
-    class RunTable(tab.IsDescription):
-        # add all of the column headings from par, NICols and VNavCols
-        for i, col in enumerate(unfilteredrun['NICols']):
-            exec(col + " = tab.Float32Col(shape=(18000, ), pos=i)")
-        for k, col in enumerate(VNavCols):
-            exec(col + " = tab.Float32Col(shape=(18000, ), pos=i+1+k)")
-        for i, (key, val) in enumerate(unfilteredrun['par'].items()):
-            pos = k + 1 + i
-            if isinstance(val, type(1)):
-                exec(key + " = tab.Int32Col(pos=pos)")
-            elif isinstance(val, type('')):
-                exec(key + " = tab.StringCol(itemsize=300, pos=pos)")
-            elif isinstance(val, type(1.)):
-                exec(key + " = tab.Float32Col(pos=pos)")
-            elif isinstance(val, type(np.ones(1))):
-                exec(key + " = tab.Float32Col(shape=(" + str(len(val)) + ", ), pos=pos)")
-
-        # add the columns for the processed data
-        processedCols = ['FrameAccelerationX',
-                         'FrameAccelerationY',
-                         'FrameAccelerationZ',
-                         'PitchRate',
-                         'PullForce',
-                         'RearWheelRate',
-                         'RollAngle',
-                         'RollRate',
-                         'ForwardSpeed',
-                         'SteerAngle',
-                         'SteerRate',
-                         'SteerTorque',
-                         'tau',
-                         'YawRate']
-
-        for k, col in enumerate(processedCols):
-            if col == 'tau':
-                exec(col + " = tab.Float32Col(pos=i + 1 + k)")
-            else:
-                exec(col + " = tab.Float32Col(shape=(18000, ), pos=i + 1 + k)")
-
-        # get rid intermediate variables so they are not stored in the class
-        del(i, k, col, key, pos, val, processedCols)
-
-    return RunTable
 
 def get_run_data(pathtofile):
     '''
@@ -693,7 +762,7 @@ def get_run_data(pathtofile):
     '''
 
     # open the file
-    runfile = tab.openFile(pathtofile)
+    runfile = tables.openFile(pathtofile)
 
     # intialize a dictionary for storage
     rundata = {}
@@ -778,7 +847,7 @@ def get_calib_data(pathToFile):
 
     '''
 
-    calibFile = tab.openFile(pathToFile)
+    calibFile = tables.openFile(pathToFile)
 
     calibData = {}
 
