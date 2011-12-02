@@ -7,11 +7,12 @@ from operator import xor
 
 # dependencies
 import numpy as np
-import tables as tables
+import tables
 
 class DataSet(object):
 
-    def __init__(self, fileName='test.h5', pathToH5='../BicycleDAQ/data/h5'):
+    def __init__(self, fileName='test.h5', pathToH5='../BicycleDAQ/data/h5',
+            pathToCorruption='data-corruption.csv'):
         """Creates the object and sets the filename.
 
         Parameters
@@ -20,12 +21,15 @@ class DataSet(object):
             Path to the database file.
         pathToH5 : string
             Path to the directory containing the run h5 files.
+        pathToCorruption : string
+            The path to the data corruption csv file.
 
         """
 
         self.fileName = fileName
         self.pathToH5 = pathToH5
-        self.pathToCalibH5 = os.path.join(self.pathToH5, 'CalibData', 'h5')
+        self.pathToCalibH5 = os.path.join(self.pathToH5, '..', 'CalibData', 'h5')
+        self.pathToCorruption = pathToCorruption
 
         # these columns may be used in the future but for now there is no reason to
         # introduce them into the database
@@ -83,10 +87,37 @@ class DataSet(object):
         RunTable = self.run_table_class(unfilteredRun)
 
         # add the data table to the root group
-        rTable = self.database.createTable('/', 'runTable',
+        self.create_table('/', 'runTable',
             RunTable, 'Run Information', expectedrows=(numRuns + 50))
 
-        rTable.flush()
+    def create_table(self, *args, **kwargs):
+        """Creates an empty table at the root.
+
+        Notes
+        -----
+        This excepts the same arguments as createTable. The database must be
+        open with write permission.
+
+        """
+        where = args[0]
+        name = args[1]
+        # add the signal table to the root group
+        try:
+            table = self.database.createTable(*args, **kwargs)
+        except tables.NodeError:
+            response = raw_input('{} already exists.\n'.format(name) +
+                'Do you want to overwrite it? (y or n)\n')
+            if response == 'y':
+                print("{} will be overwritten.".format(name))
+                self.database.removeNode(where, name)
+                table = self.database.createTable(*args, **kwargs)
+                table.flush()
+            else:
+                print("Aborted, {} was not overwritten.".format(name))
+        except AttributeError:
+            print('The database is not open for writing.')
+        else:
+            table.flush()
 
     def create_signal_table(self):
         """Creates an empty signal information table.
@@ -98,14 +129,10 @@ class DataSet(object):
         """
 
         # generate the signal table description class
-        SignalTable = self.create_signal_table_class()
+        SignalTable = self.signal_table_class()
 
-        # add the signal table to the root group
-        sTable = self.database.createTable('/', 'signalTable',
-                                  SignalTable, 'Signal Information',
-                                  expectedrows=50)
-
-        sTable.flush()
+        self.create_table('/', 'signalTable',
+                SignalTable, 'Signal Information', expectedrows=50)
 
     def create_calibration_table(self):
         """Creates an empty calibration table.
@@ -119,14 +146,12 @@ class DataSet(object):
         numCalibs = len(sorted(os.listdir(self.pathToCalibH5)))
 
         # generate the calibration table description class
-        calibrationTable = self.create_calibration_table_class()
+        calibrationTable = self.calibration_table_class()
 
         # add the calibration table to the root group
-        cTable = self.database.createTable('/', 'calibrationTable',
+        self.create_table('/', 'calibrationTable',
             calibrationTable, 'Calibration Information',
             expectedrows=(numCalibs + 10))
-
-        cTable.flush()
 
     def create_database(self, compression=False):
         """Creates an HDF5 file for data collected from the instrumented
@@ -154,12 +179,12 @@ class DataSet(object):
         self.compression = compression
 
         # create a new hdf5 file ready for writing
-        self.openFile(mode='w', title='Instrumented Bicycle Data')
+        self.open(mode='w', title='Instrumented Bicycle Data')
 
         # initialize all of the tables
-        self.initialize_run_table()
-        self.initialize_signal_table()
-        self.initialize_calibration_table()
+        self.create_run_table()
+        self.create_signal_table()
+        self.create_calibration_table()
 
         self.close()
 
@@ -247,6 +272,17 @@ class DataSet(object):
                 elif isinstance(val, type(np.ones(1))):
                     exec(key + " = tables.Float32Col(shape=(" + str(len(val)) +
                             ", ), pos=i)")
+                # a marker that declares the data corrupt or unusable
+                corrupt = tables.BoolCol()
+                # a market that declares the data quiestionable
+                warning = tables.BoolCol()
+                # mark a disturbance in the run that hand either a knee come
+                # off, the handlebar touch the treadmill sides or the trailer
+                # hit the side of the treadmill. There should never be any more
+                # that 15 disturbances per run
+                knee = tables.BoolCol(shape=(15))
+                handlebar = tables.BoolCol(shape=(15))
+                trailer = tables.BoolCol(shape=(15))
 
             # get rid intermediate variables so they are not stored in the class
             del(i, key, val)
@@ -261,7 +297,7 @@ class DataSet(object):
 
         print "Loading signal data."
 
-        self.openFile(mode='a')
+        self.open(mode='a')
 
         # fill in the signal table
         signalTable = self.database.root.signalTable
@@ -333,7 +369,7 @@ class DataSet(object):
 
         print "Loading calibration data."
 
-        self.openFile(mode='a')
+        self.open(mode='a')
 
         # fill in the calibration table
         calibrationTable = self.database.root.calibrationTable
@@ -360,10 +396,13 @@ class DataSet(object):
         """Adds all the data from the hdf5 files in the h5 directory to the run
         information table and stores the time series data in arrays."""
 
+        import warnings
+        warnings.filterwarnings('ignore', category=tables.NaturalNameWarning)
+
         print "Loading run data."
 
         # open the hdf5 file for appending
-        self.openFile(mode='a')
+        self.open(mode='a')
 
         # get the table and the row object
         runTable = self.database.root.runTable
@@ -376,6 +415,9 @@ class DataSet(object):
         # if this group already exists you get a NodeError, probably should
         # allow overwriting or not from user choice or something
         self.database.createGroup('/', 'rawData')
+
+        # load the corruption data
+        corruption = self.load_corruption_data()
 
         # fill the rows with data
         for rownum, run in enumerate(files):
@@ -390,6 +432,26 @@ class DataSet(object):
             # stick all the metadata in the run info table
             for par, val in rundata['par'].items():
                 row[par] = val
+
+            # add the data corruption information
+            if int(run[:-3]) in corruption['runid']:
+                index = corruption['runid'].index(int(run[:-3]))
+
+                row['corrupt'] = corruption['corrupt'][index]
+                row['warning'] = corruption['warning'][index]
+
+                knee = np.zeros(15, dtype=np.bool)
+                knee[corruption['knee'][index]] = True
+                row['knee'] = knee
+
+                handlebar = np.zeros(15, dtype=np.bool)
+                handlebar[corruption['handlebar'][index]] = True
+                row['handlebar'] = handlebar
+
+                trailer = np.zeros(15, dtype=np.bool)
+                trailer[corruption['trailer'][index]] = True
+                row['trailer'] = trailer
+
             row.append()
 
             # store the time series data in arrays
@@ -409,6 +471,8 @@ class DataSet(object):
 
         runTable.flush()
 
+        self.close()
+
     def fill_all_tables(self):
         """Writes data to all of the tables."""
 
@@ -417,6 +481,40 @@ class DataSet(object):
         self.fill_run_table()
 
         print("{} is ready for action!".format(self.fileName))
+
+    def load_corruption_data(self):
+        """Returns a dictionary containing the contents of the provided data
+        corruption file.
+
+        Returns
+        -------
+        corruption : dictionary
+            There is a keyword for each column in the file and a list of the
+            values.
+
+        """
+
+        with open(self.pathToCorruption, 'r') as f:
+            for i, line in enumerate(f):
+                values = line.split(',')
+                if i == 0:
+                    corruption = {v.strip().lower(): list() for v in values}
+                else:
+                    corruption['runid'].append(int(values[0]))
+                    corruption['corrupt'].append(values[1] == 'TRUE')
+                    corruption['warning'].append(values[2] == 'TRUE')
+                    corruption['knee'].append([int(x) for x in
+                        values[3].split(';') if x])
+                    corruption['handlebar'].append([int(x) for x in
+                        values[4].split(';') if x])
+                    corruption['trailer'].append([int(x) for x in
+                        values[5].split(';') if x])
+                    if corruption['reason'] != 'na':
+                        corruption['reason'].append(values[6].strip())
+                    else:
+                        corruption['reason'].append('')
+
+        return corruption
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -738,11 +836,6 @@ def get_two_runs(pathToH5):
               unfilteredRun['par']['RunID'])
 
     return filteredRun, unfilteredRun
-
-def load_database(filename='InstrumentedBicycleData.h5', mode='r'):
-    '''Returns the a pytables database.'''
-    return tables.openFile(filename, mode=mode)
-
 
 def get_run_data(pathtofile):
     '''
