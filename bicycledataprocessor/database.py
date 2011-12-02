@@ -11,7 +11,7 @@ import tables
 
 class DataSet(object):
 
-    def __init__(self, fileName='test.h5', pathToH5='../BicycleDAQ/data/h5',
+    def __init__(self, fileName='InstrumentedBicycleData.h5', pathToH5='../BicycleDAQ/data/h5',
             pathToCorruption='data-corruption.csv'):
         """Creates the object and sets the filename.
 
