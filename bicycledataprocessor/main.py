@@ -11,12 +11,13 @@ from scipy import io
 from scipy.integrate import cumtrapz
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-
-# local dependencies
-from database import *
-from signalprocessing import *
+from tables import NoSuchNodeError
 from dtk.process import spline_over_nan, derivative, butterworth, freq_spectrum
 import bicycleparameters as bp
+
+# local dependencies
+from database import get_row_num, get_cell, DataSet
+import signalprocessing as sigpro
 
 class Signal(np.ndarray):
     """
@@ -226,7 +227,7 @@ class Signal(np.ndarray):
 
     def time(self):
         """Returns the time vector of the signal."""
-        return time_vector(len(self), self.sampleRate)
+        return sigpro.time_vector(len(self), self.sampleRate)
 
     def time_derivative(self):
         """Returns the time derivative of the signal."""
@@ -242,7 +243,7 @@ class Signal(np.ndarray):
         '''Returns the shifted and truncated signal based on the provided
         timeshift, tau.'''
         # this is now an ndarray instead of a Signal
-        return Signal(truncate_data(self, tau), self.as_dictionary())
+        return Signal(sigpro.truncate_data(self, tau), self.as_dictionary())
 
 class RawSignal(Signal):
     """
@@ -569,7 +570,7 @@ class Run():
             # doesn't have all the signals, so skip the ones that aren't there
             try:
                 self.rawSignals[col] = RawSignal(runid, col, database)
-            except tables.NoSuchNodeError:
+            except NoSuchNodeError:
                 pass
 
         print("Loading the bicycle and rider data for " +
@@ -591,7 +592,7 @@ class Run():
                 self.calibratedSignals[calibSig.name] = calibSig
 
             # calculate tau for this run
-            self.tau = find_timeshift(
+            self.tau = sigpro.find_timeshift(
                 self.calibratedSignals['AccelerometerAccelerationY'],
                 self.calibratedSignals['AccelerationZ'],
                 self.metadata['NISampleRate'],
@@ -684,7 +685,7 @@ class Run():
             yawAngle = yawAngle.convert_units('radian')
             rearWheelRate = rearWheelRate.convert_units('radian/second')
 
-            lon, lat = rear_wheel_contact_rate(rR, rearWheelRate, yawAngle)
+            lon, lat = sigpro.rear_wheel_contact_rate(rR, rearWheelRate, yawAngle)
 
             lon.name = 'LongitudinalRearContactRate'
             lon.units = 'meter/second'
@@ -761,7 +762,7 @@ class Run():
             print('All signals were not available. SteerTorque was not ' +
                   'computed.')
         else:
-            steerTorque = steer_torque(
+            steerTorque = sigpro.steer_torque(
                               frameAngRate,
                               frameAngAccel,
                               frameAccel,
@@ -801,7 +802,7 @@ class Run():
             omegaZ = omegaZ.convert_units('radian/second')
             rollAngle = rollAngle.convert_units('radian')
 
-            yr, rr, pr = yaw_roll_pitch_rate(omegaX, omegaY, omegaZ, lam,
+            yr, rr, pr = sigpro.yaw_roll_pitch_rate(omegaX, omegaY, omegaZ, lam,
                                              rollAngle=rollAngle)
             yr.units = 'radian/second'
             yr.name = 'YawRate'
@@ -826,7 +827,7 @@ class Run():
             forkRate = forkRate.convert_units('radian/second')
             omegaZ = omegaZ.convert_units('radian/second')
 
-            steerRate = steer_rate(forkRate, omegaZ)
+            steerRate = sigpro.steer_rate(forkRate, omegaZ)
             steerRate.units = 'radian/second'
             steerRate.name = 'SteerRate'
             self.computedSignals['SteerRate'] = steerRate
@@ -918,7 +919,7 @@ class Run():
         meanSpeed = speed[len(speed) / 2 - 100:len(speed) / 2 + 100].mean()
         wheelbase = self.bicycleRiderParameters['w']
         # find the bump
-        indices = find_bump(acc, acc.sampleRate, meanSpeed, wheelbase,
+        indices = sigpro.find_bump(acc, acc.sampleRate, meanSpeed, wheelbase,
                 self.bumpLength)
 
 
@@ -1180,4 +1181,3 @@ def create_html_tables(database, directory='docs/tables'):
     f = open(os.path.join(directory, 'CalibrationTable.html'), 'w')
     f.writelines(lines)
     f.close()
-

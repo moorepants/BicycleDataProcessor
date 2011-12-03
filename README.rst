@@ -47,11 +47,12 @@ ready for use. Open a python command prompt and import the module::
 
 First load the database as read-only::
 
-    >>> database = bdp.load_database()
+    >>> dataset = bdp.DataSet()
+    >>> dataset.open()
 
 Now load a run::
 
-    >>> run = bdp.Run('00105', database, <pathToParameterData>, filterSigs=True)
+    >>> run = bdp.Run('00105', dataset.database, <pathToParameterData>, filterSigs=True)
 
 The `<pathToParameterData>` needs to point to the data directory associated
 with the BicycleParameters module and should contain Jason, Luke, Charlie and
@@ -110,17 +111,19 @@ Build the PyTables HDF5 File from raw data
 ------------------------------------------
 
 The second option would be to build the database with the raw data from
-BicycleDAQ_. BicycleDAQ_ stores the raw data as matlab matfiles. These need to be
+BicycleDAQ_. BicycleDAQ_ stores the raw data as matlab mat files. These need to be
 converted to equivalent HDF5 files to be able to load into the master database
 file. Use the m-file `tools/fill_h5.m` to convert the runs and calibration data
 into HDF5 files. Then use this module to create the database and fill it with
 the data. First create an empty database file in the current directory.::
 
-    >>> bdp.create_database()
+    >>> import bicycledataprocessor.main as bdp
+    >>> dataset = bdp.DataSet()
+    >>> dataset.create_database()
 
 Now, fill the database with the data.::
 
-    >>> bdp.fill_tables()
+    >>> dataset.fill_all_tables()
 
 Warnings
 ========
