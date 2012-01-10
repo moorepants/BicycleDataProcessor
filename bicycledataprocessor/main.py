@@ -974,7 +974,7 @@ class Run():
 
     def plot(self, *args, **kwargs):
         '''
-        Plots the time series of various signals.
+        Returns a plot of the time series of various signals.
 
         Parameters
         ----------
@@ -998,6 +998,8 @@ class Run():
                    'calibrated': self.calibratedSignals,
                    'raw': self.rawSignals,
                    'task': self.taskSignals}
+
+        fig = plt.figure()
 
         leg = []
         for i, arg in enumerate(args):
@@ -1030,7 +1032,7 @@ class Run():
 
         plt.grid()
 
-        plt.show()
+        return fig
 
     def verify_time_sync(self):
         """Shows a plot of the acceleration signals that were used to
