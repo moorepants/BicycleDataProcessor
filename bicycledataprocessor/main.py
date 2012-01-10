@@ -12,7 +12,9 @@ from scipy.integrate import cumtrapz
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from tables import NoSuchNodeError
+
 import dtk.process as process
+from dtk.bicycle import front_contact, benchmark_to_moore
 import bicycleparameters as bp
 
 # local dependencies
@@ -220,7 +222,7 @@ class Signal(np.ndarray):
         return line
 
     def spline(self):
-        """Returns the signal with nans replaced by the resultes of a cubic
+        """Returns the signal with nans replaced by the results of a cubic
         spline."""
         splined = process.spline_over_nan(self.time(), self)
         return Signal(splined, self.as_dictionary())
@@ -545,6 +547,11 @@ class Run():
         dataTable = database.root.runTable
         signalTable = database.root.signalTable
 
+        try:
+            runid.islower()
+        except AttributeError:
+            runid = pad_with_zeros(str(runid), 5)
+
         # get the row number for this particular run id
         rownum = get_row_num(runid, dataTable)
 
@@ -635,12 +642,14 @@ class Run():
                 self.compute_steer_rate()
                 self.compute_yaw_roll_pitch_rates()
                 self.compute_steer_torque()
-                self.compute_yaw_angle()
-                self.compute_wheel_contact_rates()
-                self.compute_wheel_contact_points()
 
                 print('Extracting the task portion from the data.')
                 self.extract_task()
+
+                self.compute_yaw_angle()
+                self.compute_wheel_contact_rates()
+                self.compute_wheel_contact_points()
+                self.compute_front_wheel_contact_points()
 
                 topSig = 'task'
 
@@ -653,7 +662,6 @@ class Run():
                     print('Filtering the computed signals.')
                     for k, v in self.computedSignals.items():
                         self.computedSignals[k] = v.filter(filterFreq)
-
         else:
             raise NotImplementedError
             # else just get the values stored in the database
@@ -667,13 +675,13 @@ class Run():
 
         # get the rates
         try:
-            latRate = self.computedSignals['LateralRearContactRate']
-            lonRate = self.computedSignals['LongitudinalRearContactRate']
+            latRate = self.taskSignals['LateralRearContactRate']
+            lonRate = self.taskSignals['LongitudinalRearContactRate']
         except AttributeError:
             print('At least one of the rates are not available. ' +
                   'The YawAngle was not computed.')
         else:
-            # convert to radians per second
+            # convert to meters per second
             latRate = latRate.convert_units('meter/second')
             lonRate = lonRate.convert_units('meter/second')
             # integrate and try to account for the drift
@@ -684,17 +692,35 @@ class Run():
             lat.units = 'meter'
             lon.name = 'LongitudinalRearContact'
             lon.units = 'meter'
-            # store in computed signals
-            self.computedSignals[lat.name] = lat
-            self.computedSignals[lon.name] = lon
+            # store in task signals
+            self.taskSignals[lat.name] = lat
+            self.taskSignals[lon.name] = lon
+
+    def compute_front_wheel_contact_points(self):
+        """Caluculates the front wheel contact points in the ground plane."""
+
+        q1 = self.taskSignals['LateralRearContact']
+        q2 = self.taskSignals['LongitudinalRearContact']
+        q3 = self.taskSignals['YawAngle']
+        q4 = self.taskSignals['RollAngle']
+        q7 = self.taskSignals['SteerAngle']
+
+        p = benchmark_to_moore(self.bicycleRiderParameters)
+
+        f = np.vectorize(front_contact)
+        q9, q10 = f(q1, q2, q3, q4, q7, p['d1'], p['d2'], p['d3'], p['rr'],
+            p['rf'])
+
+        self.taskSignals['LateralFrontContact'] = q9
+        self.taskSignals['LongitudinalFrontContact'] = q10
 
     def compute_wheel_contact_rates(self):
         """Calculates the rates of the wheel contact points in the ground
         plane."""
 
         try:
-            yawAngle = self.computedSignals['YawAngle']
-            rearWheelRate = self.truncatedSignals['RearWheelRate']
+            yawAngle = self.taskSignals['YawAngle']
+            rearWheelRate = self.taskSignals['RearWheelRate']
             rR = self.bicycleRiderParameters['rR'] # this should be in meters
         except AttributeError:
             print('Either the yaw angle, rear wheel rate or ' +
@@ -708,22 +734,22 @@ class Run():
 
             lon.name = 'LongitudinalRearContactRate'
             lon.units = 'meter/second'
-            self.computedSignals[lon.name] = lon
+            self.taskSignals[lon.name] = lon
 
             lat.name = 'LateralRearContactRate'
             lat.units = 'meter/second'
-            self.computedSignals[lat.name] = lat
+            self.taskSignals[lat.name] = lat
 
     def compute_yaw_angle(self):
         """Computes the yaw angle by integrating the yaw rate."""
 
         # get the yaw rate
         try:
-            yawRate = self.computedSignals['YawRate']
+            yawRate = self.taskSignals['YawRate']
         except AttributeError:
             print('YawRate is not available. The YawAngle was not computed.')
         else:
-            # convert to to radians per second
+            # convert to radians per second
             yawRate = yawRate.convert_units('radian/second')
             # integrate and try to account for the drift
             yawAngle = yawRate.integrate(subtractMean=True)
@@ -731,7 +757,7 @@ class Run():
             yawAngle.name = 'YawAngle'
             yawAngle.units = 'radian'
             # store in computed signals
-            self.computedSignals['YawAngle'] = yawAngle
+            self.taskSignals['YawAngle'] = yawAngle
 
     def compute_steer_torque(self, plot=False):
         """Computes the rider applied steer torque.

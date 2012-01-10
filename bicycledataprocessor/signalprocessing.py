@@ -417,7 +417,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     timeBumpSec = time[bSec[0]:bSec[1]]
 
     if len(niBumpSec) < 200:
-        raise Warning('The bump section is mighty small.')
+        Warning('The bump section is mighty small.')
 
     # set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
