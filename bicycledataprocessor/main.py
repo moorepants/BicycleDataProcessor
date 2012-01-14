@@ -1039,7 +1039,9 @@ class Run():
         syncronize the NI and VN data. If it doesn't show a good fit, then
         something is wrong."""
 
-        self.plot('-AccelerometerAccelerationY', 'AccelerationZ', signalType="truncated")
+        fig = self.plot('-AccelerometerAccelerationY', 'AccelerationZ',
+                signalType="truncated")
+        fig.show()
 
     def video(self):
         '''
