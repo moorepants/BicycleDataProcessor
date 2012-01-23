@@ -12,11 +12,11 @@ from scipy.integrate import cumtrapz
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from tables import NoSuchNodeError
-from dtk.process import spline_over_nan, derivative, butterworth, freq_spectrum
+import dtk.process as process
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell, DataSet
+from database import get_row_num, get_cell
 import signalprocessing as sigpro
 
 class Signal(np.ndarray):
@@ -183,12 +183,12 @@ class Signal(np.ndarray):
     def filter(self, frequency):
         """Returns the signal filtered by a low pass Butterworth at the given
         frequency."""
-        filteredArray = butterworth(self.spline(), frequency, self.sampleRate)
+        filteredArray = process.butterworth(self.spline(), frequency, self.sampleRate)
         return Signal(filteredArray, self.as_dictionary())
 
     def frequency(self):
         """Returns the frequency content of the signal."""
-        return freq_spectrum(self.spline(), self.sampleRate)
+        return process.freq_spectrum(self.spline(), self.sampleRate)
 
     def integrate(self, initialCondition=0., subtractMean=False):
         """Integrates the signal using the trapezoidal rule."""
@@ -222,8 +222,12 @@ class Signal(np.ndarray):
     def spline(self):
         """Returns the signal with nans replaced by the resultes of a cubic
         spline."""
-        splined = spline_over_nan(self.time(), self)
+        splined = process.spline_over_nan(self.time(), self)
         return Signal(splined, self.as_dictionary())
+
+    def subtract_mean(self):
+        """Returns the mean subtracted data."""
+        return process.subtract_mean(self)
 
     def time(self):
         """Returns the time vector of the signal."""
@@ -232,7 +236,7 @@ class Signal(np.ndarray):
     def time_derivative(self):
         """Returns the time derivative of the signal."""
         # caluculate the numerical time derivative
-        dsdt = derivative(self.time(), self, method='combination')
+        dsdt = process.derivative(self.time(), self, method='combination')
         # map the metadata from self onto the derivative
         dsdt = Signal(dsdt, self.as_dictionary())
         dsdt.name = dsdt.name + 'Dot'
@@ -573,67 +577,68 @@ class Run():
             except NoSuchNodeError:
                 pass
 
-        print("Loading the bicycle and rider data for " +
-              "{} on {}".format(self.metadata['Rider'],
-              self.metadata['Bicycle']))
-        self.load_rider(pathToParameterData)
+        if self.metadata['Rider'] != 'None':
+            print("Loading the bicycle and rider data for " +
+                  "{} on {}".format(self.metadata['Rider'],
+                  self.metadata['Bicycle']))
+            self.load_rider(pathToParameterData)
 
-        self.bumpLength = 1.0
+        self.bumpLength = 1.0 # 1 meter
 
         if forceRecalc == True:
             print "Computing signals from raw data."
 
-            self.calibratedSignals = {}
-            self.truncatedSignals = {}
-
             # calibrate the signals for the run
+            self.calibratedSignals = {}
             for sig in self.rawSignals.values():
                 calibSig = sig.scale()
                 self.calibratedSignals[calibSig.name] = calibSig
 
-            # calculate tau for this run
-            self.tau = sigpro.find_timeshift(
-                self.calibratedSignals['AccelerometerAccelerationY'],
-                self.calibratedSignals['AccelerationZ'],
-                self.metadata['NISampleRate'],
-                self.metadata['Speed'], plotError=False)
+            if self.metadata['Maneuver'] != 'Steer Dynamics Test':
+                # calculate tau for this run
+                self.tau = sigpro.find_timeshift(
+                    self.calibratedSignals['AccelerometerAccelerationY'],
+                    self.calibratedSignals['AccelerationZ'],
+                    self.metadata['NISampleRate'],
+                    self.metadata['Speed'], plotError=False)
 
-            # truncate and spline all of the calibrated signals
-            for name, sig in self.calibratedSignals.items():
-                self.truncatedSignals[name] = sig.truncate(self.tau).spline()
+                # truncate and spline all of the calibrated signals
+                self.truncatedSignals = {}
+                for name, sig in self.calibratedSignals.items():
+                    self.truncatedSignals[name] = sig.truncate(self.tau).spline()
 
-            # transfer some of the signals to computed
-            noChange = ['FiveVolts',
-                        'PushButton',
-                        'RearWheelRate',
-                        'RollAngle',
-                        'SteerAngle',
-                        'ThreeVolts']
-            for sig in noChange:
-                if sig in ['RollAngle', 'SteerAngle']:
-                    self.computedSignals[sig] =\
-                    self.truncatedSignals[sig].convert_units('radian')
-                else:
-                    self.computedSignals[sig] = self.truncatedSignals[sig]
+                # transfer some of the signals to computed
+                noChange = ['FiveVolts',
+                            'PushButton',
+                            'RearWheelRate',
+                            'RollAngle',
+                            'SteerAngle',
+                            'ThreeVolts']
+                for sig in noChange:
+                    if sig in ['RollAngle', 'SteerAngle']:
+                        self.computedSignals[sig] =\
+                        self.truncatedSignals[sig].convert_units('radian')
+                    else:
+                        self.computedSignals[sig] = self.truncatedSignals[sig]
 
-            # compute the quantities that we are interested in
-            self.compute_pull_force()
-            self.compute_forward_speed()
-            self.compute_steer_rate()
-            self.compute_yaw_roll_pitch_rates()
-            self.compute_steer_torque()
-            self.compute_yaw_angle()
-            self.compute_wheel_contact_rates()
-            self.compute_wheel_contact_points()
+                # compute the quantities that we are interested in
+                self.compute_pull_force()
+                self.compute_forward_speed()
+                self.compute_steer_rate()
+                self.compute_yaw_roll_pitch_rates()
+                self.compute_steer_torque()
+                self.compute_yaw_angle()
+                self.compute_wheel_contact_rates()
+                self.compute_wheel_contact_points()
 
-            print('Extracting the task portion from the data.')
-            self.extract_task()
+                print('Extracting the task portion from the data.')
+                self.extract_task()
 
-            print('Filtering the task signals.')
-            if filterFreq is not None:
-                # filter all the computed signals
-                for k, v in self.taskSignals.items():
-                    self.taskSignals[k] = v.filter(filterFreq)
+                print('Filtering the task signals.')
+                if filterFreq is not None:
+                    # filter all the computed signals
+                    for k, v in self.taskSignals.items():
+                        self.taskSignals[k] = v.filter(filterFreq)
 
         else:
             raise NotImplementedError
@@ -899,7 +904,19 @@ class Run():
                 os.makedirs(fullDir)
             exportData = {}
             exportData.update(self.metadata)
-            exportData.update(self.taskSignals)
+            try:
+                exportData.update(self.taskSignals)
+            except AttributeError:
+                try:
+                    exportData.update(self.truncatedSignals)
+                except AttributeError:
+                    exportData.update(self.calibratedSignals)
+                    print('Exported calibratedSignals to {}'.format(fullDir))
+                else:
+                    print('Exported truncatedSignals to {}'.format(fullDir))
+            else:
+                print('Exported taskSignals to {}'.format(fullDir))
+
             filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
             io.savemat(os.path.join(fullDir, filename), exportData)
         else:
