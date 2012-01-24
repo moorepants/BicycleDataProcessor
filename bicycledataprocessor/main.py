@@ -16,7 +16,7 @@ import dtk.process as process
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell
+from database import get_row_num, get_cell, DataSet
 import signalprocessing as sigpro
 
 class Signal(np.ndarray):
@@ -227,7 +227,7 @@ class Signal(np.ndarray):
 
     def subtract_mean(self):
         """Returns the mean subtracted data."""
-        return process.subtract_mean(self)
+        return Signal(process.subtract_mean(self), self.as_dictionary())
 
     def time(self):
         """Returns the time vector of the signal."""
