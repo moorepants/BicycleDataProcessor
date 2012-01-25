@@ -139,12 +139,10 @@ def steer_rate(forkRate, angularRateZ):
     '''
     return forkRate - angularRateZ
 
-def steer_torque(frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
-                 handlebarAngAccel, steerAngle, steerColumnTorque,
-                 handlebarMass, handlebarInertia,
-                 damping, friction, d, ds, plot=False):
-    """
-    Returns the steer torque applied by the rider.
+def steer_torque_components(frameAngRate, frameAngAccel, frameAccel,
+        handlebarAngRate, handlebarAngAccel, steerAngle, steerColumnTorque,
+        handlebarMass, handlebarInertia, damping, friction, d, ds):
+    """Returns the components of the steer torque applied by the rider.
 
     Parameters
     ----------
@@ -186,14 +184,15 @@ def steer_torque(frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
         point on the steer axis is at the projection of the mass center onto
         the axis.
     ds : ndarray, shape(3,)
-        The distance from the acclerometer to the point on the steer axis.
+        The distance from the accelerometer to the point on the steer axis.
     plot : boolean, optional
         If true a plot of the components of the steer torque will be shown.
 
     Returns
     -------
-    steerTorque : ndarray, shape(n,)
-        The steer torque applied by the rider.
+    components : dictionary
+        A dictionary containing the ten components of the rider applied steer
+        torque.
 
     Notes
     -----
@@ -216,55 +215,53 @@ def steer_torque(frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
     mH = handlebarMass
     delta = steerAngle
 
-    parts = {}
+    components = {}
 
-    parts['Hdot1'] = -((IH[0, 0] * (wb1 * np.cos(delta) +
+    components['Hdot1'] = -((IH[0, 0] * (wb1 * np.cos(delta) +
                                   wb2 * np.sin(delta)) +
                       IH[2, 0] * wh3) *
                       (-wb1 * np.sin(delta) + wb2 * np.cos(delta)))
-    parts['Hdot2'] = (IH[1, 1] * (-wb1 * np.sin(delta) + wb2 * np.cos(delta)) *
-                      (wb1 * np.cos(delta) + wb2 * np.sin(delta)))
-    parts['Hdot3'] = IH[2, 2]  *  wh3p
-    parts['Hdot4'] = IH[2, 0] * (-(-wb3 + wh3) * wb1 * np.sin(delta) +
+
+    components['Hdot2'] = (IH[1, 1] *
+            (-wb1 * np.sin(delta) + wb2 * np.cos(delta)) *
+            (wb1 * np.cos(delta) + wb2 * np.sin(delta)))
+
+    components['Hdot3'] = IH[2, 2] * wh3p
+
+    components['Hdot4'] = IH[2, 0] * (-(-wb3 + wh3) * wb1 * np.sin(delta) +
                                 (-wb3 + wh3) * wb2 * np.cos(delta) +
                                 np.sin(delta) * wb2p + np.cos(delta) * wb1p)
-    parts['cross1'] = d * mH * (d * (-wb1 * np.sin(delta) + wb2 * np.cos(delta)) *
+
+    components['cross1'] = d * mH * (d * (-wb1 * np.sin(delta) + wb2 * np.cos(delta)) *
                               (wb1 * np.cos(delta) + wb2 * np.sin(delta))
                               + d * wh3p)
-    parts['cross2'] = -d * mH * (-ds[0] * wb2 ** 2 + ds[2] * wb2p -
+    components['cross2'] = -d * mH * (-ds[0] * wb2 ** 2 + ds[2] * wb2p -
                                 (ds[0] * wb3 - ds[2] * wb1) * wb3 + av1) * np.sin(delta)
-    parts['cross3'] = d * mH * (ds[0] * wb1 * wb2 + ds[0] * wb3p + ds[2] * wb2 *
+    components['cross3'] = d * mH * (ds[0] * wb1 * wb2 + ds[0] * wb3p + ds[2] * wb2 *
                                wb3 - ds[2] * wb1p + av2) * np.cos(delta)
-    parts['viscous'] = (damping  *  (-wb3 + wh3)) / 2.
-    parts['coloumb'] = np.sign(-wb3 + wh3) * friction / 2.
-    parts['steerColumn'] = steerColumnTorque
+    components['viscous'] = (damping  *  (-wb3 + wh3)) / 2.
+    components['coulomb'] = np.sign(-wb3 + wh3) * friction / 2.
+    components['steerColumn'] = steerColumnTorque
 
-    steerTorque = np.sum(parts.values(), axis=0)
+    return components
 
-    #steerTorque = np.zeros_like(steerAngle)
-    #for v in parts.values():
-        #steerTorque += v
+def steer_torque(components):
+    """Returns the steer torque given the components.
 
-    if plot:
-        time = steerAngle.time()
-        plt.figure()
-        leg = []
-        linetypes = ['-'] * 7 + ['--'] * 7
-        i = 0
-        for k, v in parts.items():
-            plt.plot(time, v, linetypes[i])
-            leg.append(k)
-            i += 1
-        plt.plot(time, steerTorque, '--')
-        leg.append('steerTorque')
-        plt.plot(time, av2, '--')
-        leg.append('av2')
-        plt.plot(time, steerAngle, '--')
-        leg.append('steerAngle')
-        plt.legend(leg)
-        plt.show()
+    Parameters
+    ----------
+    components : dictionary
+        A dictionary containing the ten components of the rider applied steer
+        torque.
 
-    return steerTorque
+    Returns
+    -------
+    steerTorque : ndarray, shape(n,)
+        The steer torque applied by the rider.
+
+    """
+
+    return np.sum(components.values(), axis=0)
 
 def rear_wheel_contact_rate(rearRadius, rearWheelRate, yawAngle):
     """Returns the longitudinal and lateral components of the velocity of the

@@ -594,6 +594,8 @@ class Run():
                 calibSig = sig.scale()
                 self.calibratedSignals[calibSig.name] = calibSig
 
+            topSig = 'calibrated'
+
             if self.metadata['Maneuver'] != 'Steer Dynamics Test':
                 # calculate tau for this run
                 self.tau = sigpro.find_timeshift(
@@ -606,6 +608,8 @@ class Run():
                 self.truncatedSignals = {}
                 for name, sig in self.calibratedSignals.items():
                     self.truncatedSignals[name] = sig.truncate(self.tau).spline()
+
+                topSig = 'truncated'
 
                 # transfer some of the signals to computed
                 noChange = ['FiveVolts',
@@ -634,11 +638,17 @@ class Run():
                 print('Extracting the task portion from the data.')
                 self.extract_task()
 
-                print('Filtering the task signals.')
-                if filterFreq is not None:
-                    # filter all the computed signals
+                topSig = 'task'
+
+            if filterFreq is not None:
+                if topSig == 'task':
+                    print('Filtering the task signals.')
                     for k, v in self.taskSignals.items():
                         self.taskSignals[k] = v.filter(filterFreq)
+                elif topSig == 'computed':
+                    print('Filtering the computed signals.')
+                    for k, v in self.computedSignals.items():
+                        self.computedSignals[k] = v.filter(filterFreq)
 
         else:
             raise NotImplementedError
@@ -719,75 +729,114 @@ class Run():
             # store in computed signals
             self.computedSignals['YawAngle'] = yawAngle
 
-    def compute_steer_torque(self, plotComponents=False):
+    def compute_steer_torque(self, plot=False):
+        """Computes the rider applied steer torque.
+
+        Parameters
+        ----------
+        plot : boolean, optional
+            Default is False, but if True a plot is generated.
+
+        """
         # steer torque
-        try:
-            frameAngRate = np.vstack((
-                self.truncatedSignals['AngularRateX'],
-                self.truncatedSignals['AngularRateY'],
-                self.truncatedSignals['AngularRateZ']))
-            frameAngAccel = np.vstack((
-                self.truncatedSignals['AngularRateX'].time_derivative(),
-                self.truncatedSignals['AngularRateY'].time_derivative(),
-                self.truncatedSignals['AngularRateZ'].time_derivative()))
-            frameAccel = np.vstack((
-                self.truncatedSignals['AccelerationX'],
-                self.truncatedSignals['AccelerationY'],
-                self.truncatedSignals['AccelerationZ']))
-            handlebarAngRate = self.truncatedSignals['ForkRate']
-            handlebarAngAccel = self.truncatedSignals['ForkRate'].time_derivative()
-            steerAngle = self.truncatedSignals['SteerAngle']
-            steerColumnTorque =\
-                self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
-            handlebarMass = self.bicycleRiderParameters['mG']
-            handlebarInertia =\
-                self.bicycle.steer_assembly_moment_of_inertia(fork=False,
-                    wheel=False, nominal=True)
-            # this is the distance from the handlebar center of mass to the
-            # steer axis
-            w = self.bicycleRiderParameters['w']
-            c = self.bicycleRiderParameters['c']
-            lam = self.bicycleRiderParameters['lam']
-            xG = self.bicycleRiderParameters['xG']
-            zG = self.bicycleRiderParameters['zG']
-            handlebarCoM = np.array([xG, 0., zG])
-            d = bp.geometry.distance_to_steer_axis(w, c, lam,
-                    handlebarCoM)
-            # these are the distances from the point on the steer axis which is
-            # aligned with the handlebar center of mass to the accelerometer on
-            # the frame
-            ds1 = self.bicycle.parameters['Measured']['ds1']
-            ds3 = self.bicycle.parameters['Measured']['ds3']
-            ds = np.array([ds1, 0., ds3]) # i measured these
-            # damping and friction values come from Peter's work, I need to verify
-            # them still
-            damping = 0.3475
-            friction = 0.0861
-        except AttributeError:
-            print('All signals were not available. SteerTorque was not ' +
-                  'computed.')
-        else:
-            steerTorque = sigpro.steer_torque(
-                              frameAngRate,
-                              frameAngAccel,
-                              frameAccel,
-                              handlebarAngRate,
-                              handlebarAngAccel,
-                              steerAngle,
-                              steerColumnTorque,
-                              handlebarMass,
-                              handlebarInertia,
-                              damping,
-                              friction,
-                              d,
-                              ds,
-                              plot=plotComponents)
-            stDict = {'units':'newton*meter',
-                      'name':'SteerTorque',
-                      'runid':self.metadata['RunID'],
-                      'sampleRate':steerAngle.sampleRate,
-                      'source':'NA'}
-            self.computedSignals['SteerTorque'] = Signal(steerTorque, stDict)
+        frameAngRate = np.vstack((
+            self.truncatedSignals['AngularRateX'],
+            self.truncatedSignals['AngularRateY'],
+            self.truncatedSignals['AngularRateZ']))
+        frameAngAccel = np.vstack((
+            self.truncatedSignals['AngularRateX'].time_derivative(),
+            self.truncatedSignals['AngularRateY'].time_derivative(),
+            self.truncatedSignals['AngularRateZ'].time_derivative()))
+        frameAccel = np.vstack((
+            self.truncatedSignals['AccelerationX'],
+            self.truncatedSignals['AccelerationY'],
+            self.truncatedSignals['AccelerationZ']))
+        handlebarAngRate = self.truncatedSignals['ForkRate']
+        handlebarAngAccel = self.truncatedSignals['ForkRate'].time_derivative()
+        steerAngle = self.truncatedSignals['SteerAngle']
+        steerColumnTorque =\
+            self.truncatedSignals['SteerTubeTorque'].convert_units('newton*meter')
+        handlebarMass = self.bicycleRiderParameters['mG']
+        handlebarInertia =\
+            self.bicycle.steer_assembly_moment_of_inertia(fork=False,
+                wheel=False, nominal=True)
+        # this is the distance from the handlebar center of mass to the
+        # steer axis
+        w = self.bicycleRiderParameters['w']
+        c = self.bicycleRiderParameters['c']
+        lam = self.bicycleRiderParameters['lam']
+        xG = self.bicycleRiderParameters['xG']
+        zG = self.bicycleRiderParameters['zG']
+        handlebarCoM = np.array([xG, 0., zG])
+        d = bp.geometry.distance_to_steer_axis(w, c, lam, handlebarCoM)
+        # these are the distances from the point on the steer axis which is
+        # aligned with the handlebar center of mass to the accelerometer on
+        # the frame
+        ds1 = self.bicycle.parameters['Measured']['ds1']
+        ds3 = self.bicycle.parameters['Measured']['ds3']
+        ds = np.array([ds1, 0., ds3]) # i measured these
+        # damping and friction values come from Peter's work, I need to verify
+        # them still
+        damping = 0.3475
+        friction = 0.0861
+
+        components = sigpro.steer_torque_components(
+            frameAngRate, frameAngAccel, frameAccel, handlebarAngRate,
+            handlebarAngAccel, steerAngle, steerColumnTorque,
+            handlebarMass, handlebarInertia, damping, friction, d, ds)
+        steerTorque = sigpro.steer_torque(components)
+
+        stDict = {'units':'newton*meter',
+                  'name':'SteerTorque',
+                  'runid':self.metadata['RunID'],
+                  'sampleRate':steerAngle.sampleRate,
+                  'source':'NA'}
+        self.computedSignals['SteerTorque'] = Signal(steerTorque, stDict)
+
+        if plot is True:
+
+            time = steerAngle.time()
+
+            hdot = (components['Hdot1'] + components['Hdot2'] +
+                components['Hdot3'] + components['Hdot4'])
+            cross = (components['cross1'] + components['cross2'] +
+                components['cross3'])
+
+            fig = plt.figure()
+
+            frictionAx = fig.add_subplot(4, 1, 1)
+            frictionAx.plot(time, components['viscous'],
+                            time, components['coulomb'],
+                            time, components['viscous'] + components['coulomb'])
+            frictionAx.set_ylabel('Torque [N-m]')
+            frictionAx.legend(('Viscous Friction', 'Coulomb Friction',
+                'Total Friction'))
+
+            dynamicAx = fig.add_subplot(4, 1, 2)
+            dynamicAx.plot(time, hdot, time, cross, time, hdot + cross)
+            dynamicAx.set_ylabel('Torque [N-m]')
+            dynamicAx.legend((r'Torque due to $\dot{H}$',
+                              r'Torque due to $r \times m a$',
+                              r'Total Dynamic Torque'))
+
+            additionalAx = fig.add_subplot(4, 1, 3)
+            additionalAx.plot(time, hdot + cross + components['viscous'] +
+                    components['coulomb'])
+            additionalAx.set_ylabel('Torque [N-m]')
+            additionalAx.legend(('Total Frictional and Dynamic Torque'))
+
+            torqueAx = fig.add_subplot(4, 1, 4)
+            torqueAx.plot(time, components['steerColumn'],
+                time, hdot + cross + components['viscous'] + components['coulomb'],
+                time, steerTorque)
+            torqueAx.set_xlabel('Time [s]')
+            torqueAx.set_ylabel('Torque [N-m]')
+            torqueAx.legend(('Measured Torque', 'Frictional and Dynamic Torque',
+                'Rider Applied Torque'))
+
+            plt.show()
+
+            return fig
 
     def compute_yaw_roll_pitch_rates(self):
         """Computes the yaw, roll and pitch rates of the bicycle frame."""
