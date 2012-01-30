@@ -16,7 +16,7 @@ import dtk.process as process
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell, DataSet
+from database import get_row_num, get_cell, DataSet, pad_with_zeros
 import signalprocessing as sigpro
 
 class Signal(np.ndarray):
@@ -1139,31 +1139,6 @@ def matlab_date_to_object(matDate):
 
     '''
     return datetime.datetime.strptime(matDate, '%d-%b-%Y %H:%M:%S')
-
-def pad_with_zeros(num, digits):
-    '''
-    Adds zeros to the front of a string needed to produce the number of
-    digits.
-
-    If `digits` = 4 and `num` = '25' then the function returns '0025'.
-
-    Parameters
-    ----------
-    num : string
-        A string representation of a number (i.e. '25')
-    digits : integer
-        The total number of digits desired.
-
-    Returns
-    -------
-    num : string
-
-    '''
-
-    for i in range(digits - len(num)):
-        num = '0' + num
-
-    return num
 
 def sync_data(directory='exports/'):
     """Sync's data to the biosport website."""

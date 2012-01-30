@@ -65,9 +65,10 @@ class DataSet(object):
 
         try:
             self.database.close()
-            del self.database
         except AttributeError:
             print('The database is not open.')
+        else:
+            del self.database
 
     def create_run_table(self):
         """Creates an empty run information table.
@@ -392,50 +393,84 @@ class DataSet(object):
 
         self.close()
 
-    def fill_run_table(self):
+    def fill_run_table(self, runs=None, overwrite=False):
         """Adds all the data from the hdf5 files in the h5 directory to the run
-        information table and stores the time series data in arrays."""
+        information table and stores the time series data in arrays.
+
+        Parameters
+        ----------
+        runs : string or list of strings, optional
+            If `run` is `all`, the entire directory of individual run files
+            will be added to the database. If `run` is a list of run ids, e.g.
+            ['00345', '00346'], then those files will be added to the database.
+            If run is the default `None`, then only the new files in the
+            directory will be added.
+        overwrite : boolean, optional
+            If `True` any runs that are already in the database will be
+            overwritten. Otherwise, if the runs already exist in the database,
+            the user will be prompted to overwrite the data.
+
+        """
 
         import warnings
         warnings.filterwarnings('ignore', category=tables.NaturalNameWarning)
 
-        print "Loading run data."
-
         # open the hdf5 file for appending
         self.open(mode='a')
 
-        # get the table and the row object
+        # create a group to store the time series data, if the group is already
+        # there, the leave it be
+        try:
+            self.database.createGroup('/', 'rawData')
+        except tables.NodeError:
+            pass
+
+        # get a list of run ids that are already in the database
         runTable = self.database.root.runTable
-        row = runTable.row
+        databaseRuns = [pad_with_zeros(str(x), 5) for x in
+                runTable.col('RunID')]
 
         # load the list of files from the h5 directory
         files = sorted(os.listdir(self.pathToH5))
+        # remove the extensions
+        directoryRuns = [os.path.splitext(x)[0] for x in files]
 
-        # create a group to store the time series data
-        # if this group already exists you get a NodeError, probably should
-        # allow overwriting or not from user choice or something
-        self.database.createGroup('/', 'rawData')
+        # find which runs that need to be added/modified
+        if runs is not None:
+            try:
+                # try to sort the list if given
+                runs.sort()
+            except AttributeError:
+                # otherwise it should be 'all'
+                if runs != 'all':
+                    raise ValueError("Please supply a list of runs or 'all' ")
+                else:
+                    runs = directoryRuns
+        else:
+            # if None then all the new runs in the directory should be added
+            runs = list(set(directoryRuns) - set(databaseRuns))
 
         # load the corruption data
         corruption = self.load_corruption_data()
 
-        # fill the rows with data
-        for rownum, run in enumerate(files):
-            print 'Adding run: %s to row number: %d' % (run, rownum)
+        # now find the runs that need to be modified and the runs that need to
+        # be added
+        runsToUpdate = sorted(list(set(runs) & set(databaseRuns)))
+        runsToAppend = sorted(list(set(runs) - set(runsToUpdate)))
 
-            # extract the run ID from the file name
-            runID = run[:-3]
+        def fill_row(row, runData):
+            """Fills out all the columns in a row given the runData dictionary
+            and the corruption dictionary."""
 
-            # loads the raw data for a single run from file
-            rundata = get_run_data(os.path.join(self.pathToH5, run))
+            runNum = runData['par']['RunID']
 
             # stick all the metadata in the run info table
-            for par, val in rundata['par'].items():
+            for par, val in runData['par'].items():
                 row[par] = val
 
             # add the data corruption information
-            if int(run[:-3]) in corruption['runid']:
-                index = corruption['runid'].index(int(run[:-3]))
+            if runNum in corruption['runid']:
+                index = corruption['runid'].index(runNum)
 
                 row['corrupt'] = corruption['corrupt'][index]
                 row['warning'] = corruption['warning'][index]
@@ -452,22 +487,60 @@ class DataSet(object):
                 trailer[corruption['trailer'][index]] = True
                 row['trailer'] = trailer
 
+        for runID in runsToUpdate:
+            if overwrite is True:
+                yesOrNo = 'yes'
+            else:
+                yesOrNo = None
+
+            while yesOrNo != 'yes' and yesOrNo != 'no':
+                q = 'Do you want to overwrite run {}?'.format(runID)
+                yesOrNo = raw_input(q + ' (yes or no)\n')
+
+            if yesOrNo == 'yes':
+                for row in runTable.where('RunID == {}'.format(str(int(runID)))):
+                    runData = get_run_data(os.path.join(self.pathToH5, runID + '.h5'))
+                    fill_row(row, runData)
+                    row.update()
+                # overwrite the arrays
+                runGroup = self.database.root.rawData._f_getChild(runID)
+                for i, col in enumerate(runData['NICols']):
+                    if col not in self.ignoredNICols:
+                        timeSeries = runGroup._f_getChild(col)
+                        timeSeries = runData['NIData'][i]
+                for i, col in enumerate(runData['VNavCols']):
+                    timeSeries = runGroup._f_getChild(col)
+                    timeSeries = runData['VNavData'][i]
+                print('Overwrote run {}.'.format(runID))
+            else:
+                print('Did not overwrite run {}.'.format(runID))
+
+        runTable.flush()
+
+        # now add any new runs
+        row = runTable.row
+        for runID in runsToAppend:
+            print('Appending run: {}'.format(runID))
+
+            runData = get_run_data(os.path.join(self.pathToH5, runID + '.h5'))
+
+            fill_row(row, runData)
             row.append()
 
             # store the time series data in arrays
             runGroup = self.database.createGroup(self.database.root.rawData,
                     runID)
-            for i, col in enumerate(rundata['NICols']):
+            for i, col in enumerate(runData['NICols']):
                 if col not in self.ignoredNICols:
                     try:
                         self.database.createArray(runGroup, col,
-                            rundata['NIData'][i])
+                            runData['NIData'][i])
                     except IndexError:
                         print("{} not measured in this run.".format(col))
 
-            for i, col in enumerate(rundata['VNavCols']):
+            for i, col in enumerate(runData['VNavCols']):
                 self.database.createArray(runGroup, col,
-                        rundata['VNavData'][i])
+                        runData['VNavData'][i])
 
         runTable.flush()
 
@@ -515,6 +588,20 @@ class DataSet(object):
                         corruption['reason'].append('')
 
         return corruption
+
+    def add_runs(self):
+        self.open()
+
+        # get list of runs in database
+
+        # get list of runs in h5 folder
+        files = sorted(os.listdir(self.pathToH5))
+
+        # make list of runs to add
+
+        # add runs
+
+        self.close()
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -959,3 +1046,28 @@ def get_calib_data(pathToFile):
     calibFile.close()
 
     return calibData
+
+def pad_with_zeros(num, digits):
+    '''
+    Adds zeros to the front of a string needed to produce the number of
+    digits.
+
+    If `digits` = 4 and `num` = '25' then the function returns '0025'.
+
+    Parameters
+    ----------
+    num : string
+        A string representation of a number (i.e. '25')
+    digits : integer
+        The total number of digits desired.
+
+    Returns
+    -------
+    num : string
+
+    '''
+
+    for i in range(digits - len(num)):
+        num = '0' + num
+
+    return num
