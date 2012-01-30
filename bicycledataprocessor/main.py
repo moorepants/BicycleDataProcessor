@@ -596,7 +596,11 @@ class Run():
 
             topSig = 'calibrated'
 
-            if self.metadata['Maneuver'] != 'Steer Dynamics Test':
+            maneuver = self.metadata['Maneuver']
+            con1 = maneuver != 'Steer Dynamics Test'
+            con2 = maneuver != 'System Test'
+            con3 = maneuver != 'Static Calibration'
+            if con1 and con2 and con3:
                 # calculate tau for this run
                 self.tau = sigpro.find_timeshift(
                     self.calibratedSignals['AccelerometerAccelerationY'],
