@@ -191,6 +191,97 @@ class DataSet(object):
 
         print "{0} successfully created.".format(self.fileName)
 
+    def sync_data(self, directory='exports/'):
+        """Sync's data to the biosport website."""
+        user = 'biosport'
+        host = 'mae.ucdavis.edu'
+        remoteDir = '/home/grads/biosport/public_html/InstrumentedBicycleData/ProcessedData/'
+        os.system("rsync -avz " + directory + ' -e ssh ' + user + '@' + host + ':' + remoteDir)
+
+    def create_html_tables(self, directory='docs/tables'):
+        """Creates a table of all the basic info for the runs."""
+
+        # create the directory if it isn't already there
+        if not os.path.exists(directory):
+            print "Creating {0}".format(directory)
+            os.makedirs(directory)
+
+        self.open()
+
+        # make a run table
+        dTab = self.database.root.runTable
+
+        # only write these columns
+        cols = ['DateTime',
+                'RunID',
+                'Rider',
+                'Bicycle',
+                'Maneuver',
+                'Environment',
+                'Speed',
+                'Notes']
+
+        lines = ['<table border="1">\n<tr>\n']
+
+        for col in cols:
+            lines.append("<th>" + col + "</th>\n")
+
+        lines.append("</tr>\n")
+
+        for row in dTab.iterrows():
+            lines.append("<tr>\n")
+            for cell in cols:
+                lines.append("<td>" + str(row[cell]) + "</td>\n")
+            lines.append("</tr>\n")
+
+        lines.append("</table>")
+
+        f = open(os.path.join(directory, 'RunTable.html'), 'w')
+        f.writelines(lines)
+        f.close()
+
+        sTab = self.database.root.signalTable
+        lines = ['<table border="1">\n<tr>\n']
+        for col in sTab.colnames:
+            lines.append("<th>" + col + "</th>\n")
+
+        lines.append("</tr>\n")
+
+        for row in sTab.iterrows():
+            lines.append("<tr>\n")
+            for cell in sTab.colnames:
+                lines.append("<td>" + str(row[cell]) + "</td>\n")
+            lines.append("</tr>\n")
+
+        lines.append("</table>")
+
+        f = open(os.path.join(directory, 'SignalTable.html'), 'w')
+        f.writelines(lines)
+        f.close()
+
+        cTab = self.database.root.calibrationTable
+        lines = ['<table border="1">\n<tr>\n']
+        for col in cTab.colnames:
+            if col not in ['v', 'x', 'y']:
+                lines.append("<th>" + col + "</th>\n")
+
+        lines.append("</tr>\n")
+
+        for row in cTab.iterrows():
+            lines.append("<tr>\n")
+            for cell in cTab.colnames:
+                if cell not in ['v', 'x', 'y']:
+                    lines.append("<td>" + str(row[cell]) + "</td>\n")
+            lines.append("</tr>\n")
+
+        lines.append("</table>")
+
+        f = open(os.path.join(directory, 'CalibrationTable.html'), 'w')
+        f.writelines(lines)
+        f.close()
+
+        self.close()
+
     def signal_table_class(self):
         """Creates a class that is used to describe the table containing
         information about the signals.
