@@ -6,9 +6,11 @@ from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fmin
 import matplotlib.pyplot as plt # only for testing
 
-# local dependencies
-#from signalprocessing import *
 from dtk.process import time_vector, butterworth, normalize, subtract_mean
+
+# local dependencies
+from bdpexceptions import TimeShiftError
+#from signalprocessing import *
 
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
@@ -311,7 +313,7 @@ def sync_error(tau, signal1, signal2, time):
     '''
     # make sure tau isn't too large
     if np.abs(tau) >= time[-1]:
-        raise ValueError(('abs(tau), {0}, must be less than or equal to ' +
+        raise TimeShiftError(('abs(tau), {0}, must be less than or equal to ' +
                          '{1}').format(str(np.abs(tau)), str(time[-1])))
 
     # this is the time for the second signal which is assumed to lag the first
@@ -371,7 +373,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     # raise an error if the signals are not the same length
     N = len(niAcc)
     if N != len(vnAcc):
-        raise StandardError('Signals are not the same length!')
+        raise TimeShiftError('Signals are not the same length!')
 
     # make a time vector
     time = time_vector(N, sampleRate)
@@ -383,7 +385,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     # some constants for find_bump
     wheelbase = 1.02 # this is the wheelbase of the rigid rider bike
     bumpLength = 1.
-    cutoff = 50.
+    cutoff = 30.
     # filter the NI Signal
     filNiSig = butterworth(niSig, cutoff, sampleRate)
     # find the bump in the filtered NI signal
@@ -459,6 +461,9 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     if np.abs(tau - tau0) > 0.01:
         tau = tau0
         print "Bad minimizer!! Using the guess, %f, instead." % tau
+
+    if tau > 0.6 or tau < 0.05:
+        raise TimeShiftError('This tau, {} s, is probably wrong'.format(str(tau)))
 
     return tau
 

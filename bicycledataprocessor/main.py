@@ -20,7 +20,8 @@ import bicycleparameters as bp
 # local dependencies
 from database import get_row_num, get_cell, pad_with_zeros
 # this is just so you can import it in the main module, will be removed later
-from database import DataSet 
+from database import DataSet
+from bdpexceptions import TimeShiftError
 import signalprocessing as sigpro
 
 class Signal(np.ndarray):
@@ -315,7 +316,10 @@ class RawSignal(Signal):
         try:
             obj.sensor = Sensor(obj.name, cTab)
         except KeyError:
-            print "There is no sensor named {0}.".format(signalName)
+            pass
+            # This just means that there was no sensor associated with that
+            # signal for calibration purposes.
+            #print "There is no sensor named {0}.".format(signalName)
 
         # this assumes that the supply voltage for this signal is the same for
         # all sensor calibrations
@@ -329,8 +333,9 @@ class RawSignal(Signal):
                 obj.supply = database.getNode('/rawData/' + runid,
                         name=supplySource).read()
         except IndexError:
-            print "{0} does not have a supply voltage.".format(signalName)
-            print "-" * 79
+            pass
+            #print "{0} does not have a supply voltage.".format(signalName)
+            #print "-" * 79
 
         # get the appropriate sample rate
         if obj.source == 'NI':
@@ -385,10 +390,11 @@ class RawSignal(Signal):
                       'HipPotentiometer',
                       'TwistPotentiometer']
         if self.calibrationType in ['none', 'matrix'] or self.name in doNotScale:
-            print "Not scaling {0}".format(self.name)
+            #print "Not scaling {0}".format(self.name)
             return self
         else:
-            print "Scaling {0}".format(self.name)
+            pass
+            #print "Scaling {0}".format(self.name)
 
             # pick the largest calibration date without surpassing the run date
             calibData = self.sensor.get_data_for_date(self.timeStamp)
@@ -398,8 +404,8 @@ class RawSignal(Signal):
             intercept = calibData['offset']
             calibrationSupplyVoltage = calibData['calibrationSupplyVoltage']
 
-            print "slope {0}, bias {1}, intercept {2}".format(slope, bias,
-                    intercept)
+            #print "slope {0}, bias {1}, intercept {2}".format(slope, bias,
+                    #intercept)
 
             if self.calibrationType == 'interceptStar':
                 # this is for potentiometers, where the slope is ratiometric
@@ -980,10 +986,9 @@ class Run():
         """
 
         if filetype == 'mat':
-            fullDir = os.path.join(directory, filetype)
-            if not os.path.exists(fullDir):
-                print "Creating {0}".format(fullDir)
-                os.makedirs(fullDir)
+            if not os.path.exists(directory):
+                print "Creating {0}".format(directory)
+                os.makedirs(directory)
             exportData = {}
             exportData.update(self.metadata)
             try:
@@ -993,14 +998,14 @@ class Run():
                     exportData.update(self.truncatedSignals)
                 except AttributeError:
                     exportData.update(self.calibratedSignals)
-                    print('Exported calibratedSignals to {}'.format(fullDir))
+                    print('Exported calibratedSignals to {}'.format(directory))
                 else:
-                    print('Exported truncatedSignals to {}'.format(fullDir))
+                    print('Exported truncatedSignals to {}'.format(directory))
             else:
-                print('Exported taskSignals to {}'.format(fullDir))
+                print('Exported taskSignals to {}'.format(directory))
 
             filename = pad_with_zeros(str(self.metadata['RunID']), 5) + '.mat'
-            io.savemat(os.path.join(fullDir, filename), exportData)
+            io.savemat(os.path.join(directory, filename), exportData)
         else:
             raise NotImplementedError(('{0} method is not available' +
                                       ' yet.').format(filetype))
