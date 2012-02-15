@@ -650,8 +650,8 @@ class Run():
 
                 # compute task specific variables
                 self.compute_yaw_angle()
-                self.compute_wheel_contact_rates()
-                self.compute_wheel_contact_points()
+                self.compute_rear_wheel_contact_rates()
+                self.compute_rear_wheel_contact_points()
                 self.compute_front_wheel_contact_points()
 
                 topSig = 'task'
@@ -672,7 +672,7 @@ class Run():
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
 
-    def compute_wheel_contact_points(self):
+    def compute_rear_wheel_contact_points(self):
         """Computes the location of the wheel contact points in the ground
         plane."""
 
@@ -702,8 +702,8 @@ class Run():
     def compute_front_wheel_contact_points(self):
         """Caluculates the front wheel contact points in the ground plane."""
 
-        q1 = self.taskSignals['LateralRearContact']
-        q2 = self.taskSignals['LongitudinalRearContact']
+        q1 = self.taskSignals['LongitudinalRearContact']
+        q2 = self.taskSignals['LateralRearContact']
         q3 = self.taskSignals['YawAngle']
         q4 = self.taskSignals['RollAngle']
         q7 = self.taskSignals['SteerAngle']
@@ -714,10 +714,10 @@ class Run():
         q9, q10 = f(q1, q2, q3, q4, q7, p['d1'], p['d2'], p['d3'], p['rr'],
             p['rf'])
 
-        self.taskSignals['LateralFrontContact'] = q9
-        self.taskSignals['LongitudinalFrontContact'] = q10
+        self.taskSignals['LongitudinalFrontContact'] = q9
+        self.taskSignals['LateralFrontContact'] = q10
 
-    def compute_wheel_contact_rates(self):
+    def compute_rear_wheel_contact_rates(self):
         """Calculates the rates of the wheel contact points in the ground
         plane."""
 
@@ -932,7 +932,7 @@ class Run():
         else:
             rearWheelRate = rearWheelRate.convert_units('radian/second')
 
-            self.computedSignals['ForwardSpeed'] = rR * rearWheelRate
+            self.computedSignals['ForwardSpeed'] = -rR * rearWheelRate
             self.computedSignals['ForwardSpeed'].units = 'meter/second'
             self.computedSignals['ForwardSpeed'].name = 'ForwardSpeed'
 
@@ -1133,9 +1133,45 @@ class Run():
 
         return fig
 
+    def plot_wheel_contact(self, show=False):
+        """Returns a plot of the wheel contact traces.
+
+        Parameters
+        ----------
+        show : boolean
+            If true the plot will be displayed.
+
+        Returns
+        -------
+        fig : matplotlib.Figure
+
+        """
+
+        q1 = self.taskSignals['LongitudinalRearContact']
+        q2 = self.taskSignals['LateralRearContact']
+        q9 = self.taskSignals['LongitudinalFrontContact']
+        q10 = self.taskSignals['LateralFrontContact']
+
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(q1, q2, q9, q10)
+        ax.set_xlabel('Distance [' + q1.units + ']')
+        ax.set_ylabel('Distance [' + q2.units + ']')
+        ax.set_ylim((-0.5, 0.5))
+        rider = self.metadata['Rider']
+        where = self.metadata['Environment']
+        speed = '%1.2f' % self.taskSignals['ForwardSpeed'].mean()
+        maneuver = self.metadata['Maneuver']
+        ax.set_title(rider + ', ' + where + ', ' + maneuver + ' @ ' + speed + ' m/s')
+
+        if show is True:
+            fig.show()
+
+        return fig
+
     def verify_time_sync(self):
         """Shows a plot of the acceleration signals that were used to
-        syncronize the NI and VN data. If it doesn't show a good fit, then
+        synchronize the NI and VN data. If it doesn't show a good fit, then
         something is wrong."""
 
         fig = self.plot('-AccelerometerAccelerationY', 'AccelerationZ',
