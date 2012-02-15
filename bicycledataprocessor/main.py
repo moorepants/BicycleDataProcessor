@@ -18,7 +18,9 @@ from dtk.bicycle import front_contact, benchmark_to_moore
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell, DataSet, pad_with_zeros
+from database import get_row_num, get_cell, pad_with_zeros
+# this is just so you can import it in the main module, will be removed later
+from database import DataSet 
 import signalprocessing as sigpro
 
 class Signal(np.ndarray):
@@ -192,7 +194,7 @@ class Signal(np.ndarray):
         """Returns the frequency content of the signal."""
         return process.freq_spectrum(self.spline(), self.sampleRate)
 
-    def integrate(self, initialCondition=0., subtractMean=False):
+    def integrate(self, initialCondition=0., detrend=False):
         """Integrates the signal using the trapezoidal rule."""
         time = self.time()
         # integrate using trapz and adjust with the initial condition
@@ -200,7 +202,7 @@ class Signal(np.ndarray):
         # this tries to characterize the drift in the integrated signal. It
         # works well for signals from straight line tracking but not
         # necessarily for lange change.
-        if subtractMean:
+        if detrend is True:
             def line(x, a, b, c):
                 return a * x**2 + b * x + c
             popt, pcov = curve_fit(line, time, grated)
@@ -636,7 +638,7 @@ class Run():
                     else:
                         self.computedSignals[sig] = self.truncatedSignals[sig]
 
-                # compute the quantities that we are interested in
+                # compute the quantities that aren't task specific
                 self.compute_pull_force()
                 self.compute_forward_speed()
                 self.compute_steer_rate()
@@ -646,6 +648,7 @@ class Run():
                 print('Extracting the task portion from the data.')
                 self.extract_task()
 
+                # compute task specific variables
                 self.compute_yaw_angle()
                 self.compute_wheel_contact_rates()
                 self.compute_wheel_contact_points()
@@ -685,7 +688,7 @@ class Run():
             latRate = latRate.convert_units('meter/second')
             lonRate = lonRate.convert_units('meter/second')
             # integrate and try to account for the drift
-            lat = latRate.integrate(subtractMean=True)
+            lat = latRate.integrate(detrend=True)
             lon = lonRate.integrate()
             # set the new name and units
             lat.name = 'LateralRearContact'
@@ -752,7 +755,7 @@ class Run():
             # convert to radians per second
             yawRate = yawRate.convert_units('radian/second')
             # integrate and try to account for the drift
-            yawAngle = yawRate.integrate(subtractMean=True)
+            yawAngle = yawRate.integrate(detrend=True)
             # set the new name and units
             yawAngle.name = 'YawAngle'
             yawAngle.units = 'radian'
