@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+from IPython.core.debugger import Tracer
+set_trace = Tracer()
+from warnings import warn
+
 # dependencies
 import numpy as np
 from scipy.interpolate import UnivariateSpline
@@ -18,10 +22,10 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     Parameters
     ----------
     accelSignal : ndarray, shape(n,)
-        This is an acceleration signal with a single distinctive large
-        acceleration that signifies riding over the bump.
+        An acceleration signal with a single distinctive large acceleration
+        that signifies riding over the bump.
     sampleRate : float
-        This is the sample rate of the signal.
+        The sample rate of the signal.
     speed : float
         Speed of travel (or treadmill) in meters per second.
     wheelbase : float
@@ -35,35 +39,51 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
         The first and last indice of the bump section.
 
     '''
-    # get the indice of the larger of the max and min
-    maxmin = (np.nanmax(accelSignal), np.nanmin(accelSignal))
-    if np.abs(maxmin[0]) > np.abs(maxmin[1]):
-        indice = np.nanargmax(accelSignal)
-    else:
-        indice = np.nanargmin(accelSignal)
 
-    print 'Bump indice:', indice
-    print 'Bump time:', indice / sampleRate
+    # Find the indice to the maximum absolute acceleration in the provided
+    # signal. This is mostly likely where the bump is. Skip the first few
+    # points in case there are some endpoint problems with filtered data.
+    n = len(accelSignal)
+    nSkip = 5
+    rectAccel = abs(subtract_mean(accelSignal[nSkip:n / 2.]))
+    indice = np.nanargmax(rectAccel) + nSkip
 
-    # give a warning if the bump doesn't seem to be at the beginning of the run
-    if indice > len(accelSignal) / 3.:
-        print "This signal's max value is not in the first third of the data"
-        print("It is at %f seconds out of %f seconds" %
-            (indice / sampleRate, len(accelSignal) / sampleRate))
-
+    # This calculates how many time samples it takes for the bicycle to roll
+    # over the bump given the speed of the bicycle, it's wheelbase, the bump
+    # length and the sample rate.
     bumpDuration = (wheelbase + bumpLength) / speed
-    print "Bump duration:", bumpDuration
     bumpSamples = int(bumpDuration * sampleRate)
     # make the number divisible by four
     bumpSamples = int(bumpSamples / 4) * 4
 
-    # get the first quarter before the tallest spike and whatever is after
+    # These indices try to capture the length of the bump based on the max
+    # acceleration indice.
     indices = (indice - bumpSamples / 4, indice, indice + 3 * bumpSamples / 4)
 
-    if np.isnan(accelSignal[indices[0]:indices[1]]).any():
-        print 'There is at least one NaN in this bump'
+    # If the maximum acceleration is not greater than 1 m/s**2, then there was
+    # probably was no bump collected in the acceleration data.
+    maxChange = rectAccel[indice - nSkip]
+    if maxChange < 1.:
+        warn('This run does not have a bump that is easily detectable. ' +
+                'The bump only gave a {:1.2f} m/s^2 change in nominal accerelation.\n'\
+                .format(maxChange) +
+                'The bump indice is {} and the bump time is {:1.2f} seconds.'\
+                    .format(str(indice), indice / float(sampleRate)))
+        return None
+    else:
+        # If the bump isn't at the beginning of the run, give a warning.
+        if indice > n / 3.:
+            warn("This signal's max value is not in the first third of the data\n"
+                    + "It is at %1.2f seconds out of %1.2f seconds" %
+                 (indice / float(sampleRate), n / float(sampleRate)))
 
-    return indices
+        # If there is a nan in the bump this maybe an issue down the line as the
+        # it is prefferable for the bump to be in the data when the fitting occurs,
+        # to get a better fit.
+        if np.isnan(accelSignal[indices[0]:indices[1]]).any():
+            warn('There is at least one NaN in this bump')
+
+        return indices
 
 def split_around_nan(sig):
     '''
@@ -401,13 +421,23 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     # and find the bump in the filtered VN signal
     vnBump = find_bump(filVnSig, sampleRate, speed, wheelbase, bumpLength)
 
-    # get an initial guess for the time shift based on the bump indice
-    guess = (niBump[1] - vnBump[1]) / float(sampleRate)
+    if vnBump is None or niBump is None:
+        guess = 0.3
+    else:
+        # get an initial guess for the time shift based on the bump indice
+        guess = (niBump[1] - vnBump[1]) / float(sampleRate)
 
-    # find the section that the bump belongs to (vnSig may have nans)
+    # Since vnSig may have nans we should only use contiguous data around
+    # around the bump. The first step is to split vnSig into sections bounded
+    # by the nans and then selected the section in which the bump falls. Then
+    # we select a similar area in niSig to run the time shift algorithm on.
+    if vnBump is None:
+        bumpLocation = 800 # just a random guess so things don't crash
+    else:
+        bumpLocation = vnBump[1]
     indices, arrays = split_around_nan(vnSig)
     for pair in indices:
-        if pair[0] <= vnBump[1] < pair[1]:
+        if pair[0] <= bumpLocation < pair[1]:
             bSec = pair
 
     # subtract the mean and normalize both signals
@@ -419,12 +449,12 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     timeBumpSec = time[bSec[0]:bSec[1]]
 
     if len(niBumpSec) < 200:
-        Warning('The bump section is mighty small.')
+        warn('The bump section is only {} samples wide.'.format(str(len(niBumpSec))))
 
     # set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
-    # 0.5 seconds
-    tauRange = np.linspace(0., 2., num=500)
+    # 1 seconds
+    tauRange = np.linspace(0., 1., num=500)
     error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
         error[i] = sync_error(val, niBumpSec, vnBumpSec, timeBumpSec)
@@ -462,7 +492,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
         tau = tau0
         print "Bad minimizer!! Using the guess, %f, instead." % tau
 
-    if tau > 0.6 or tau < 0.05:
+    if tau > 1.0 or tau < 0.05:
         raise TimeShiftError('This tau, {} s, is probably wrong'.format(str(tau)))
 
     return tau

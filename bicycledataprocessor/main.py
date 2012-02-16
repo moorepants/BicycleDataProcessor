@@ -5,6 +5,10 @@ import os
 import datetime
 from math import pi
 
+# debugging
+from IPython.core.debugger import Tracer
+set_trace = Tracer()
+
 # dependencies
 import numpy as np
 from scipy import io
@@ -630,6 +634,15 @@ class Run():
 
                 topSig = 'truncated'
 
+                # Check to make sure the signals were actually good fits by
+                # calculating the normalized root mean square. If it isn't very
+                # low, raise an error.
+                vnAcc = -self.truncatedSignals['AccelerometerAccelerationY']
+                niAcc = self.truncatedSignals['AccelerationZ']
+                rms = np.sqrt(np.mean((vnAcc - niAcc)**2)) / (niAcc.max() - niAcc.min())
+                if rms > 0.1:
+                    raise TimeShiftError('The time shift gave very poor results {}.'.format(str(rms)))
+
                 # transfer some of the signals to computed
                 noChange = ['FiveVolts',
                             'PushButton',
@@ -1016,7 +1029,7 @@ class Run():
 
         """
         # get the z acceleration from the VN-100
-        acc = self.truncatedSignals['AccelerationZ'].filter(50.)
+        acc = -self.truncatedSignals['AccelerometerAccelerationY'].filter(30.)
         # find the mean speed during the task (look at one second in the middle
         # of the data)
         speed = self.computedSignals['ForwardSpeed']
