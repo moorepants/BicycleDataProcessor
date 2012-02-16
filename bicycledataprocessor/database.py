@@ -5,6 +5,10 @@ import os
 import re
 from operator import xor
 
+# debugging
+from IPython.core.debugger import Tracer
+set_trace = Tracer()
+
 # dependencies
 import numpy as np
 import tables
@@ -518,7 +522,7 @@ class DataSet(object):
 
         # get a list of run ids that are already in the database
         runTable = self.database.root.runTable
-        databaseRuns = [pad_with_zeros(str(x), 5) for x in
+        databaseRuns = [run_id_string(x) for x in
                 runTable.col('RunID')]
 
         # load the list of files from the h5 directory
@@ -537,6 +541,9 @@ class DataSet(object):
                     raise ValueError("Please supply a list of runs or 'all' ")
                 else:
                     runs = directoryRuns
+            else:
+                # make sure they are all run id strings
+                runs = [run_id_string(x) for x in runs]
         else:
             # if None then all the new runs in the directory should be added
             runs = list(set(directoryRuns) - set(databaseRuns))
