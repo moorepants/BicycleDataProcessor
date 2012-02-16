@@ -722,6 +722,23 @@ def get_cell(datatable, colname, rownum):
 
     return cell
 
+def run_id_string(runID):
+    """Returns the run id in the five digit string format.
+
+    Parameters
+    ----------
+    runID : str or int
+        The run id either as an integer or string with leading zeros.
+
+    Returns
+    -------
+    runID : str
+        The five digit run id string.
+
+    """
+
+    return pad_with_zeros(str(runid), 5)
+
 def get_row_num(runid, table):
     '''
     Returns the row number for a particular run id.

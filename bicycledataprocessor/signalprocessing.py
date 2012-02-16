@@ -60,10 +60,10 @@ def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     # acceleration indice.
     indices = (indice - bumpSamples / 4, indice, indice + 3 * bumpSamples / 4)
 
-    # If the maximum acceleration is not greater than 1 m/s**2, then there was
+    # If the maximum acceleration is not greater than 0.5 m/s**2, then there was
     # probably was no bump collected in the acceleration data.
     maxChange = rectAccel[indice - nSkip]
-    if maxChange < 1.:
+    if maxChange < 0.5:
         warn('This run does not have a bump that is easily detectable. ' +
                 'The bump only gave a {:1.2f} m/s^2 change in nominal accerelation.\n'\
                 .format(maxChange) +

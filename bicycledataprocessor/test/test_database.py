@@ -14,3 +14,9 @@ def test_create_signal_table():
     db.create_signal_table()
     db.close()
     os.remove('sigtest.h5')
+
+def test_run_id_string():
+    ids = [105, '000105', '00105', '0105', '105']
+
+    for run in ids:
+        assert run_id_string(run) == '00105'

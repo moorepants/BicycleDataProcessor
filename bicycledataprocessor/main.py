@@ -22,11 +22,11 @@ from dtk.bicycle import front_contact, benchmark_to_moore
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell, pad_with_zeros
+from database import get_row_num, get_cell, pad_with_zeros, run_id_string
+import signalprocessing as sigpro
+from bdpexceptions import TimeShiftError
 # this is just so you can import it in the main module, will be removed later
 from database import DataSet
-from bdpexceptions import TimeShiftError
-import signalprocessing as sigpro
 
 class Signal(np.ndarray):
     """
@@ -529,7 +529,7 @@ class Sensor():
 class Run():
     """The fundamental class for a run."""
 
-    def __init__(self, runid, database, pathToParameterData, forceRecalc=True,
+    def __init__(self, runid, dataset, pathToParameterData, forceRecalc=True,
             filterFreq=None):
         """
         Loads all the data for a run if available otherwise it generates the
@@ -540,9 +540,8 @@ class Run():
         runid : int or str
             The run id should be an integer, e.g. 5, or a five digit string with
             leading zeros, e.g. '00005'.
-        database : pytable object of an hdf5 file
-            This file must contain the run data table and the calibration data
-            table.
+        dataset : DataSet object
+            A DataSet object with a full data set.
         pathToParameterData : string
             The is the path to the data directory for the BicycleParameters
             package.
@@ -556,13 +555,11 @@ class Run():
 
         print "Initializing the run object."
         # get the tables
-        dataTable = database.root.runTable
-        signalTable = database.root.signalTable
+        dataset.open()
+        dataTable = dataset.database.root.runTable
+        signalTable = dataset.database.root.signalTable
 
-        try:
-            runid.islower()
-        except AttributeError:
-            runid = pad_with_zeros(str(runid), 5)
+        runid = run_id_string(runid)
 
         # get the row number for this particular run id
         rownum = get_row_num(runid, dataTable)
@@ -570,7 +567,6 @@ class Run():
         # make some dictionaries to store all the data
         self.metadata = {}
         self.rawSignals = {}
-        self.computedSignals ={}
 
         # make lists of the input and output signals
         rawDataCols = [x['signal'] for x in
@@ -592,28 +588,18 @@ class Run():
             # rawDataCols includes all possible raw signals, but every run
             # doesn't have all the signals, so skip the ones that aren't there
             try:
-                self.rawSignals[col] = RawSignal(runid, col, database)
+                self.rawSignals[col] = RawSignal(runid, col, dataset.database)
             except NoSuchNodeError:
                 pass
 
         if self.metadata['Rider'] != 'None':
-            print("Loading the bicycle and rider data for " +
-                  "{} on {}".format(self.metadata['Rider'],
-                  self.metadata['Bicycle']))
             self.load_rider(pathToParameterData)
 
         self.bumpLength = 1.0 # 1 meter
 
         if forceRecalc == True:
             print "Computing signals from raw data."
-
-            # calibrate the signals for the run
-            self.calibratedSignals = {}
-            for sig in self.rawSignals.values():
-                calibSig = sig.scale()
-                self.calibratedSignals[calibSig.name] = calibSig
-
-            topSig = 'calibrated'
+            self.calibrate_signals()
 
             maneuver = self.metadata['Maneuver']
             con1 = maneuver != 'Steer Dynamics Test'
@@ -621,75 +607,117 @@ class Run():
             con3 = maneuver != 'Static Calibration'
             if con1 and con2 and con3:
                 # calculate tau for this run
-                self.tau = sigpro.find_timeshift(
-                    self.calibratedSignals['AccelerometerAccelerationY'],
-                    self.calibratedSignals['AccelerationZ'],
-                    self.metadata['NISampleRate'],
-                    self.metadata['Speed'], plotError=False)
+                self.compute_time_shift()
+                self.check_time_shift()
 
                 # truncate and spline all of the calibrated signals
-                self.truncatedSignals = {}
-                for name, sig in self.calibratedSignals.items():
-                    self.truncatedSignals[name] = sig.truncate(self.tau).spline()
-
-                topSig = 'truncated'
-
-                # Check to make sure the signals were actually good fits by
-                # calculating the normalized root mean square. If it isn't very
-                # low, raise an error.
-                vnAcc = -self.truncatedSignals['AccelerometerAccelerationY']
-                niAcc = self.truncatedSignals['AccelerationZ']
-                rms = np.sqrt(np.mean((vnAcc - niAcc)**2)) / (niAcc.max() - niAcc.min())
-                if rms > 0.1:
-                    raise TimeShiftError('The time shift gave very poor results {}.'.format(str(rms)))
+                self.truncate_signals()
 
                 # transfer some of the signals to computed
-                noChange = ['FiveVolts',
-                            'PushButton',
-                            'RearWheelRate',
-                            'RollAngle',
-                            'SteerAngle',
-                            'ThreeVolts']
-                for sig in noChange:
-                    if sig in ['RollAngle', 'SteerAngle']:
-                        self.computedSignals[sig] =\
-                        self.truncatedSignals[sig].convert_units('radian')
-                    else:
-                        self.computedSignals[sig] = self.truncatedSignals[sig]
+                self.compute_signals()
 
-                # compute the quantities that aren't task specific
-                self.compute_pull_force()
-                self.compute_forward_speed()
-                self.compute_steer_rate()
-                self.compute_yaw_roll_pitch_rates()
-                self.compute_steer_torque()
-
-                print('Extracting the task portion from the data.')
-                self.extract_task()
-
-                # compute task specific variables
-                self.compute_yaw_angle()
-                self.compute_rear_wheel_contact_rates()
-                self.compute_rear_wheel_contact_points()
-                self.compute_front_wheel_contact_points()
-
-                topSig = 'task'
+                self.task_signals()
 
             if filterFreq is not None:
-                if topSig == 'task':
-                    print('Filtering the task signals.')
-                    for k, v in self.taskSignals.items():
-                        self.taskSignals[k] = v.filter(filterFreq)
-                elif topSig == 'computed':
-                    print('Filtering the computed signals.')
-                    for k, v in self.computedSignals.items():
-                        self.computedSignals[k] = v.filter(filterFreq)
+                self.filter_top_signals()
         else:
             raise NotImplementedError
             # else just get the values stored in the database
             print "Loading computed signals from database."
             for col in computedCols:
                 self.computedSignals[col] = RawSignal(runid, col, datafile)
+
+        dataset.close()
+
+    def filter_top_signals(self, filterFreq):
+        """Filters the top most signals with a low pass filter."""
+        if self.topSig == 'task':
+            print('Filtering the task signals.')
+            for k, v in self.taskSignals.items():
+                self.taskSignals[k] = v.filter(filterFreq)
+        elif self.topSig == 'computed':
+            print('Filtering the computed signals.')
+            for k, v in self.computedSignals.items():
+                self.computedSignals[k] = v.filter(filterFreq)
+
+    def calibrate_signals(self):
+        """Calibrates the raw signals."""
+
+        # calibrate the signals for the run
+        self.calibratedSignals = {}
+        for sig in self.rawSignals.values():
+            calibSig = sig.scale()
+            self.calibratedSignals[calibSig.name] = calibSig
+
+        self.topSig = 'calibrated'
+
+    def task_signals(self):
+        """Computes the task signals."""
+        print('Extracting the task portion from the data.')
+        self.extract_task()
+
+        # compute task specific variables
+        self.compute_yaw_angle()
+        self.compute_rear_wheel_contact_rates()
+        self.compute_rear_wheel_contact_points()
+        self.compute_front_wheel_contact_points()
+
+        self.topSig = 'task'
+
+    def compute_signals(self):
+        self.computedSignals ={}
+        # transfer some of the signals to computed
+        noChange = ['FiveVolts',
+                    'PushButton',
+                    'RearWheelRate',
+                    'RollAngle',
+                    'SteerAngle',
+                    'ThreeVolts']
+        for sig in noChange:
+            if sig in ['RollAngle', 'SteerAngle']:
+                self.computedSignals[sig] =\
+                self.truncatedSignals[sig].convert_units('radian')
+            else:
+                self.computedSignals[sig] = self.truncatedSignals[sig]
+
+        # compute the quantities that aren't task specific
+        self.compute_pull_force()
+        self.compute_forward_speed()
+        self.compute_steer_rate()
+        self.compute_yaw_roll_pitch_rates()
+        self.compute_steer_torque()
+
+    def truncate_signals(self):
+
+        self.truncatedSignals = {}
+        for name, sig in self.calibratedSignals.items():
+            self.truncatedSignals[name] = sig.truncate(self.tau).spline()
+        self.topSig = 'truncated'
+
+    def compute_time_shift(self):
+        """Computes the time shift based on the vertical accelerometer
+        signals."""
+
+        self.tau = sigpro.find_timeshift(
+            self.calibratedSignals['AccelerometerAccelerationY'],
+            self.calibratedSignals['AccelerationZ'],
+            self.metadata['NISampleRate'],
+            self.metadata['Speed'], plotError=False)
+
+    def check_time_shift(self):
+        """Raises an error if the normalized root mean square of the shifted
+        accelerometer signals is high."""
+
+        # Check to make sure the signals were actually good fits by
+        # calculating the normalized root mean square. If it isn't very
+        # low, raise an error.
+        vnAcc = -self.calibratedSignals['AccelerometerAccelerationY']
+        niAcc = self.calibratedSignals['AccelerationZ']
+        vnAcc = vnAcc.truncate(self.tau).spline()
+        niAcc = niAcc.trucate(self.tau).spline()
+        rms = np.sqrt(np.mean((vnAcc - niAcc)**2)) / (niAcc.max() - niAcc.min())
+        if rms > 0.1:
+            raise TimeShiftError('The time shift gave very poor results {}.'.format(str(rms)))
 
     def compute_rear_wheel_contact_points(self):
         """Computes the location of the wheel contact points in the ground
@@ -1068,6 +1096,10 @@ class Run():
     def load_rider(self, pathToParameterData):
         """Creates a bicycle/rider attribute which contains the physical
         parameters for the bicycle and rider for this run."""
+
+        print("Loading the bicycle and rider data for " +
+              "{} on {}".format(self.metadata['Rider'],
+              self.metadata['Bicycle']))
 
         # currently this isn't very generic, it only assumes that there was
         # Luke, Jason, and Charlie riding on the instrumented bicycle.
