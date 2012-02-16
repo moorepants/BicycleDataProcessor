@@ -4,6 +4,7 @@
 import os
 import datetime
 from math import pi
+from warnings import warn
 
 # debugging
 from IPython.core.debugger import Tracer
@@ -607,19 +608,27 @@ class Run():
             con3 = maneuver != 'Static Calibration'
             if con1 and con2 and con3:
                 # calculate tau for this run
-                self.compute_time_shift()
-                self.check_time_shift()
+                # the following try statement may negate the need for the if
+                # statement just above, but computation time is potentially
+                # wasted and the error catching in the time shift calcs may not
+                # catch everything.
+                try:
+                    self.compute_time_shift()
+                    self.check_time_shift(0.05)
+                except TimeShiftError:
+                    warn('There was a time shift error, so only the '
+                         'calibrated signals are available.')
+                else:
+                    # truncate and spline all of the calibrated signals
+                    self.truncate_signals()
 
-                # truncate and spline all of the calibrated signals
-                self.truncate_signals()
+                    # transfer some of the signals to computed
+                    self.compute_signals()
 
-                # transfer some of the signals to computed
-                self.compute_signals()
-
-                self.task_signals()
+                    self.task_signals()
 
             if filterFreq is not None:
-                self.filter_top_signals()
+                self.filter_top_signals(filterFreq)
         else:
             raise NotImplementedError
             # else just get the values stored in the database
@@ -631,6 +640,7 @@ class Run():
 
     def filter_top_signals(self, filterFreq):
         """Filters the top most signals with a low pass filter."""
+
         if self.topSig == 'task':
             print('Filtering the task signals.')
             for k, v in self.taskSignals.items():
@@ -639,6 +649,10 @@ class Run():
             print('Filtering the computed signals.')
             for k, v in self.computedSignals.items():
                 self.computedSignals[k] = v.filter(filterFreq)
+        elif self.topSig == 'calibrated':
+            print('Filtering the calibrated signals.')
+            for k, v in self.calibratedSignals.items():
+                self.calibratedSignals[k] = v.filter(filterFreq)
 
     def calibrate_signals(self):
         """Calibrates the raw signals."""
@@ -665,6 +679,8 @@ class Run():
         self.topSig = 'task'
 
     def compute_signals(self):
+        """Computes the task independent quantities."""
+
         self.computedSignals ={}
         # transfer some of the signals to computed
         noChange = ['FiveVolts',
@@ -688,6 +704,7 @@ class Run():
         self.compute_steer_torque()
 
     def truncate_signals(self):
+        """Truncates the calibrated signals based on the time shift."""
 
         self.truncatedSignals = {}
         for name, sig in self.calibratedSignals.items():
@@ -704,20 +721,22 @@ class Run():
             self.metadata['NISampleRate'],
             self.metadata['Speed'], plotError=False)
 
-    def check_time_shift(self):
+    def check_time_shift(self, maxNRMS):
         """Raises an error if the normalized root mean square of the shifted
         accelerometer signals is high."""
 
         # Check to make sure the signals were actually good fits by
         # calculating the normalized root mean square. If it isn't very
         # low, raise an error.
-        vnAcc = -self.calibratedSignals['AccelerometerAccelerationY']
-        niAcc = self.calibratedSignals['AccelerationZ']
+        niAcc = self.calibratedSignals['AccelerometerAccelerationY']
+        vnAcc = self.calibratedSignals['AccelerationZ']
         vnAcc = vnAcc.truncate(self.tau).spline()
-        niAcc = niAcc.trucate(self.tau).spline()
-        rms = np.sqrt(np.mean((vnAcc - niAcc)**2)) / (niAcc.max() - niAcc.min())
-        if rms > 0.1:
-            raise TimeShiftError('The time shift gave very poor results {}.'.format(str(rms)))
+        niAcc = niAcc.truncate(self.tau).spline()
+        nrms = np.sqrt(np.mean((vnAcc + niAcc)**2)) / (niAcc.max() - niAcc.min())
+        if nrms > maxNRMS:
+            raise TimeShiftError(('The normalized root mean square for this ' +
+                'time shift is {}, which is greater '.format(str(nrms)) +
+                'than the maximum allowed: {}'.format(str(maxNRMS))))
 
     def compute_rear_wheel_contact_points(self):
         """Computes the location of the wheel contact points in the ground
@@ -1142,13 +1161,15 @@ class Run():
         if not kwargs:
             kwargs = {'signalType': 'task'}
 
-        mapping = {'computed': self.computedSignals,
-                   'truncated': self.truncatedSignals,
-                   'calibrated': self.calibratedSignals,
-                   'raw': self.rawSignals,
-                   'task': self.taskSignals}
+        mapping = {}
+        for x in ['computed', 'truncated', 'calibrated', 'raw', 'task']:
+            try:
+                mapping[x] = getattr(self, x + 'Signals')
+            except AttributeError:
+                pass
 
         fig = plt.figure()
+        ax = fig.add_axes([0.125, 0.125, 0.8, 0.7])
 
         leg = []
         for i, arg in enumerate(args):
@@ -1166,20 +1187,20 @@ class Run():
             else:
                 mul = 1.
             signal = sign * float(mul) * mapping[kwargs['signalType']][arg]
-            plt.plot(signal.time(), signal)
+            ax.plot(signal.time(), signal)
             leg.append(legName + ' [' + mapping[kwargs['signalType']][arg].units + ']')
 
-        plt.legend(leg)
+        ax.legend(leg)
         runid = pad_with_zeros(str(self.metadata['RunID']), 5)
-        plt.title('Run: ' + runid + ', Rider: ' + self.metadata['Rider'] +
-                  ', Speed: ' + str(self.metadata['Speed']) + 'm/s' +
-                  ', Maneuver: ' + self.metadata['Maneuver'] +
+        ax.set_title('Run: ' + runid + ', Rider: ' + self.metadata['Rider'] +
+                  ', Speed: ' + str(self.metadata['Speed']) + 'm/s' + '\n' +
+                  'Maneuver: ' + self.metadata['Maneuver'] +
                   ', Environment: ' + self.metadata['Environment'] + '\n' +
                   'Notes: ' + self.metadata['Notes'])
 
-        plt.xlabel('Time [second]')
+        ax.set_xlabel('Time [second]')
 
-        plt.grid()
+        ax.grid()
 
         return fig
 
@@ -1219,14 +1240,38 @@ class Run():
 
         return fig
 
-    def verify_time_sync(self):
+    def verify_time_sync(self, show=True, saveDir=None):
         """Shows a plot of the acceleration signals that were used to
         synchronize the NI and VN data. If it doesn't show a good fit, then
-        something is wrong."""
+        something is wrong.
+
+        Parameters
+        ----------
+        show : boolean
+            If true, the figure will be displayed.
+        saveDir : str
+            The path to a directory in which to save the figure.
+
+        """
+
+        if self.topSig == 'calibrated':
+            sigType = 'calibrated'
+        else:
+            sigType = 'truncated'
 
         fig = self.plot('-AccelerometerAccelerationY', 'AccelerationZ',
-                signalType="truncated")
-        fig.show()
+                signalType=sigType)
+        ax = fig.axes[0]
+        ax.set_xlim((0, 10))
+        title = ax.get_title()
+        ax.set_title(title + '\nSignal Type: ' + sigType)
+        if saveDir is not None:
+            runid = run_id_string(self.metadata['RunID'])
+            fig.savefig(os.path.join(saveDir, runid + '.png'))
+        if show is True:
+            fig.show()
+
+        return fig
 
     def video(self):
         '''

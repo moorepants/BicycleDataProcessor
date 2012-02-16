@@ -737,7 +737,7 @@ def run_id_string(runID):
 
     """
 
-    return pad_with_zeros(str(runid), 5)
+    return pad_with_zeros(str(runID), 5)
 
 def get_row_num(runid, table):
     '''
