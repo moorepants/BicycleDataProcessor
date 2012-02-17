@@ -367,13 +367,13 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
 
     Parameters
     ----------
-    NIacc : ndarray, shape(n, )
+    niAcc : ndarray, shape(n, )
         The acceleration of the NI accelerometer in its local Y direction.
-    VNacc : ndarray, shape(n, )
+    vnAcc : ndarray, shape(n, )
         The acceleration of the VN-100 in its local Z direction. Should be the
         same length as NIacc and contains the same signal albiet time shifted.
         The VectorNav signal should be leading the NI signal.
-    sampleRate : integer
+    sampleRate : integer or float
         Sample rate of the signals. This should be the same for each signal.
     speed : float
         The approximate forward speed of the bicycle.
@@ -471,19 +471,24 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
 
     print "The minimun of the error landscape is %f and the provided guess is %f" % (tau0, guess)
 
-    # if tau is not close to the other guess then say something
+    # If the guess from the bump find is not close to tau0 then compute the
+    # minimization for both and choose the best one. Otherwise use tau0 as, it
+    # is the more reliable initial guess.
+
     isNone = guess == None
-    isInRange = 0. < guess < 1.
+    isInRange = 0. < guess < 2.
     isCloseToTau = guess - .1 < tau0 < guess + .1
-
     if not isNone and isInRange and not isCloseToTau:
-        print("This tau0 may be a bad guess, check the error function!" +
-              " Using guess instead.")
-        tau0 = guess
+        tauSecond, fvalSecond  = fmin(sync_error, guess, args=(niBumpSec,
+            vnBumpSec, timeBumpSec), full_output=True)[0:2]
+    else:
+        fvalSecond = np.inf
 
-    print "Using %f as the guess for minimization." % tau0
+    tau, fval = fmin(sync_error, tau0, args=(niBumpSec, vnBumpSec,
+        timeBumpSec), full_output=True)[0:2]
 
-    tau  = fmin(sync_error, tau0, args=(niBumpSec, vnBumpSec, timeBumpSec))[0]
+    if fval > fvalSecond:
+        tau = tauSecond
 
     print "This is what came out of the minimization:", tau
 
@@ -492,7 +497,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
         tau = tau0
         print "Bad minimizer!! Using the guess, %f, instead." % tau
 
-    if tau > 1.0 or tau < 0.05:
+    if not (0.05 < tau < 2.0):
         raise TimeShiftError('This tau, {} s, is probably wrong'.format(str(tau)))
 
     return tau
