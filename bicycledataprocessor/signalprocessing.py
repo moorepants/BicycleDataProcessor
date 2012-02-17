@@ -454,7 +454,7 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
     # set up the error landscape, error vs tau
     # The NI lags the VectorNav and the time shift is typically between 0 and
     # 1 seconds
-    tauRange = np.linspace(0., 1., num=500)
+    tauRange = np.linspace(0., 2., num=500)
     error = np.zeros_like(tauRange)
     for i, val in enumerate(tauRange):
         error[i] = sync_error(val, niBumpSec, vnBumpSec, timeBumpSec)
@@ -471,31 +471,26 @@ def find_timeshift(niAcc, vnAcc, sampleRate, speed, plotError=False):
 
     print "The minimun of the error landscape is %f and the provided guess is %f" % (tau0, guess)
 
-    # If the guess from the bump find is not close to tau0 then compute the
-    # minimization for both and choose the best one. Otherwise use tau0 as, it
-    # is the more reliable initial guess.
+    # Compute the minimum of the function using both the result from the error
+    # landscape and the bump find for initial guesses to the minimizer. Choose
+    # the best of the two.
+    tauBump, fvalBump  = fmin(sync_error, guess, args=(niBumpSec,
+        vnBumpSec, timeBumpSec), full_output=True, disp=True)[0:2]
 
-    isNone = guess == None
-    isInRange = 0. < guess < 2.
-    isCloseToTau = guess - .1 < tau0 < guess + .1
-    if not isNone and isInRange and not isCloseToTau:
-        tauSecond, fvalSecond  = fmin(sync_error, guess, args=(niBumpSec,
-            vnBumpSec, timeBumpSec), full_output=True)[0:2]
+    tauLandscape, fvalLandscape = fmin(sync_error, tau0, args=(niBumpSec, vnBumpSec,
+        timeBumpSec), full_output=True, disp=True)[0:2]
+
+    if fvalBump < fvalLandscape:
+        tau = tauBump
     else:
-        fvalSecond = np.inf
+        tau = tauLandscape
 
-    tau, fval = fmin(sync_error, tau0, args=(niBumpSec, vnBumpSec,
-        timeBumpSec), full_output=True)[0:2]
-
-    if fval > fvalSecond:
-        tau = tauSecond
+    #### if the minimization doesn't do a good job, just use the tau0
+    ###if np.abs(tau - tau0) > 0.01:
+        ###tau = tau0
+        ###print "Bad minimizer!! Using the guess, %f, instead." % tau
 
     print "This is what came out of the minimization:", tau
-
-    # if the minimization doesn't do a good job, just use the tau0
-    if np.abs(tau - tau0) > 0.01:
-        tau = tau0
-        print "Bad minimizer!! Using the guess, %f, instead." % tau
 
     if not (0.05 < tau < 2.0):
         raise TimeShiftError('This tau, {} s, is probably wrong'.format(str(tau)))

@@ -607,25 +607,15 @@ class Run():
             con2 = maneuver != 'System Test'
             con3 = maneuver != 'Static Calibration'
             if con1 and con2 and con3:
-                # calculate tau for this run
-                # the following try statement may negate the need for the if
-                # statement just above, but computation time is potentially
-                # wasted and the error catching in the time shift calcs may not
-                # catch everything.
-                try:
-                    self.compute_time_shift()
-                    self.check_time_shift(0.05)
-                except TimeShiftError:
-                    warn('There was a time shift error, so only the '
-                         'calibrated signals are available.')
-                else:
-                    # truncate and spline all of the calibrated signals
-                    self.truncate_signals()
+                self.compute_time_shift()
+                self.check_time_shift(0.1)
+                # truncate and spline all of the calibrated signals
+                self.truncate_signals()
 
-                    # transfer some of the signals to computed
-                    self.compute_signals()
+                # transfer some of the signals to computed
+                self.compute_signals()
 
-                    self.task_signals()
+                self.task_signals()
 
             if filterFreq is not None:
                 self.filter_top_signals(filterFreq)
@@ -1266,6 +1256,9 @@ class Run():
         title = ax.get_title()
         ax.set_title(title + '\nSignal Type: ' + sigType)
         if saveDir is not None:
+            if not os.path.exists(saveDir):
+                print "Creating {0}".format(saveDir)
+                os.makedirs(saveDir)
             runid = run_id_string(self.metadata['RunID'])
             fig.savefig(os.path.join(saveDir, runid + '.png'))
         if show is True:
