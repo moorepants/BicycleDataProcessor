@@ -1,5 +1,8 @@
-from bicycledataprocessor import database
 import os
+from bicycledataprocessor import database
+from numpy.random import randint
+from numpy import ones
+import numpy.testing as npt
 
 def test_create_signal_table():
     db = database.DataSet(fileName='sigtest.h5')
@@ -19,4 +22,35 @@ def test_run_id_string():
     ids = [105, '000105', '00105', '0105', '105']
 
     for run in ids:
-        assert run_id_string(run) == '00105'
+        assert database.run_id_string(run) == '00105'
+
+def test_get_run_data():
+    """This just tests whether the .mat files return the same values as the .h5
+    files."""
+
+    runID = database.run_id_string(randint(0, 700))
+
+    pathToData = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleDAQ/data'
+
+    matFile = os.path.join(pathToData, runID + '.mat')
+    h5File =  os.path.join(pathToData, 'h5', runID + '.h5')
+
+    matDat = database.get_run_data(matFile)
+    h5Dat = database.get_run_data(h5File)
+
+    for k, v in h5Dat.items():
+        if k == 'NICols' or k == 'VNavCols' or k == 'VNavDataText' :
+            assert v == matDat[k]
+        elif k == 'NIData' or k == 'VNavData':
+            npt.assert_allclose(v, matDat[k])
+        elif k == 'par':
+            for subKey, subVal in v.items():
+                if isinstance(subVal, type(ones(1))) or subKey == 'Speed':
+                    npt.assert_allclose(subVal, matDat[k][subKey])
+                else:
+                    assert subVal == matDat[k][subKey]
+                #print('{} matches'.format(subKey))
+        else:
+            assert v == matDat[k]
+
+        #print('{} in {} matches'.format(k, runID))

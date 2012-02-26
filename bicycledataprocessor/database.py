@@ -12,6 +12,7 @@ set_trace = Tracer()
 # dependencies
 import numpy as np
 import tables
+from scipy.io import loadmat
 
 class DataSet(object):
 
@@ -1039,15 +1040,14 @@ def get_two_runs(pathToH5):
 
     return filteredRun, unfilteredRun
 
-def get_run_data(pathtofile):
+def get_run_data(pathToFile):
     '''
-    Returns data from the run h5 files using pytables and formats it better
-    for python.
+    Returns data from the raw run files.
 
     Parameters
     ----------
     pathtofile : string
-        The path to the h5 file that contains run data.
+        The path to the mat or h5 file that contains run data.
 
     Returns
     -------
@@ -1056,24 +1056,16 @@ def get_run_data(pathtofile):
 
     '''
 
-    # open the file
-    runfile = tables.openFile(pathtofile)
-
-    # intialize a dictionary for storage
-    rundata = {}
-
-    # put the parameters into a dictionary
-    rundata['par'] = {}
-    for col in runfile.root.par:
-        # convert them to regular python types
+    def parse_par(runData, key, val):
+        """Cleans up the par dictionary."""
         try:
-            if col.name == 'Speed':
-                rundata['par'][col.name] = float(col.read()[0])
+            if key == 'Speed':
+                runData['par'][key] = float(val)
             else:
-                rundata['par'][col.name] = int(col.read()[0])
+                runData['par'][key] = int(val)
         except:
-            pstr = str(col.read()[0])
-            rundata['par'][col.name] = pstr
+            pstr = str(val)
+            runData['par'][key] = pstr
             if pstr[0] == '$':
                 parsed = parse_vnav_string(pstr)[0][2:-1]
                 if len(parsed) == 1:
@@ -1083,46 +1075,76 @@ def get_run_data(pathtofile):
                         parsed = parsed[0]
                 else:
                     parsed = np.array([float(x) for x in parsed])
-                rundata['par'][col.name] = parsed
+                runData['par'][key] = parsed
 
-    if 'Notes' not in rundata['par'].keys():
-        rundata['par']['Notes'] = ''
+    ext = os.path.splitext(pathToFile)[1]
 
-    # get the NIData
-    rundata['NIData'] = runfile.root.NIData.read()
+    # intialize a dictionary for storage
+    runData = {}
+    # put the parameters into a dictionary
+    runData['par'] = {}
 
-    # get the VN-100 data column names
-    # make the array into a list of python string and gets rid of unescaped
-    # control characters
-    columns = [re.sub(r'[^ -~].*', '', str(x))
-               for x in runfile.root.VNavCols.read()]
-    # gets rid of white space
-    rundata['VNavCols'] = [x.replace(' ', '') for x in columns]
+    if ext == '.mat':
+        mat = loadmat(pathToFile, squeeze_me=True)
 
-    # get the NI column names
-    # make a list of NI columns from the InputPair structure from matlab
-    rundata['NICols'] = []
-    for col in runfile.root.InputPairs:
-        rundata['NICols'].append((str(col.name), int(col.read()[0])))
+        for key, val in zip(mat['par'].dtype.names, mat['par'][()]):
+            parse_par(runData, key, val)
 
-    rundata['NICols'].sort(key=lambda x: x[1])
+        runData['NIData'] = mat['NIData'].T
+        runData['VNavCols'] = [str(x).replace(' ', '') for x in mat['VNavCols']]
+        inputPairs = [(x, int(y)) for x, y in zip(mat['InputPairs'].dtype.names, mat['InputPairs'][()])]
+        runData['NICols'] = list(mat['InputPairs'].dtype.names)
+        runData['VNavDataText'] = [str(x).strip() for x in mat['VNavDataText']]
 
-    rundata['NICols'] = [x[0] for x in rundata['NICols']]
+    elif ext == '.h5':
+        # open the file
+        runfile = tables.openFile(pathToFile)
 
-    # get the VNavDataText
-    rundata['VNavDataText'] = [re.sub(r'[^ -~].*', '', str(x))
-                               for x in runfile.root.VNavDataText.read()]
+        # get the NIData
+        runData['NIData'] = runfile.root.NIData.read()
 
-    # redefine the NIData using parsing that accounts for the corrupt values
+        # get the VN-100 data column names
+        # make the array into a list of python string and gets rid of unescaped
+        # control characters
+        columns = [re.sub(r'[^ -~].*', '', str(x))
+                   for x in runfile.root.VNavCols.read()]
+        # gets rid of white space
+        runData['VNavCols'] = [x.replace(' ', '') for x in columns]
+
+        for col in runfile.root.par:
+            key = col.name
+            val = col.read()[0]
+            parse_par(runData, key, val)
+
+        # get the NI column names
+        # make a list of NI columns from the InputPair structure from matlab
+        inputPairs = []
+        for col in runfile.root.InputPairs:
+            inputPairs.append((str(col.name), int(col.read()[0])))
+
+        # get the VNavDataText
+        runData['VNavDataText'] = [re.sub(r'[^ -~].*', '', str(x))
+                                   for x in runfile.root.VNavDataText.read()]
+
+        # close the file
+        runfile.close()
+
+    inputPairs.sort(key=lambda x: x[1])
+    runData['NICols'] = [x[0] for x in inputPairs]
+
+    # redefine the VNData using parsing that accounts for the corrupt values
     # better
-    rundata['VNavData'] = replace_corrupt_strings_with_nan(
-                           rundata['VNavDataText'],
-                           rundata['VNavCols'])
+    runData['VNavData'] = replace_corrupt_strings_with_nan(
+                           runData['VNavDataText'],
+                           runData['VNavCols'])
 
-    # close the file
-    runfile.close()
+    if 'Notes' not in runData['par'].keys():
+        runData['par']['Notes'] = ''
 
-    return rundata
+    if runData['par']['Notes'] == '[]':
+        runData['par']['Notes'] = ''
+
+    return runData
 
 def get_calib_data(pathToFile):
     '''
