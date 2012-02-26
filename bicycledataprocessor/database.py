@@ -1147,8 +1147,7 @@ def get_run_data(pathToFile):
     return runData
 
 def get_calib_data(pathToFile):
-    '''
-    Returns calibration data from the run h5 files using pytables and
+    """Returns calibration data from the run h5 files using pytables and
     formats it as a dictionairy.
 
     Parameters
@@ -1162,25 +1161,48 @@ def get_calib_data(pathToFile):
     calibData : dictionary
         A dictionary that looks similar to how the data was stored in Matlab.
 
-    '''
-
-    calibFile = tables.openFile(pathToFile)
+    """
 
     calibData = {}
 
-    for thing in calibFile.root.data:
-        if len(thing.read().flatten()) == 1:
-            calibData[thing.name] = thing.read()[0]
-        else:
-            if thing.name in ['x', 'v']:
-                try:
-                    calibData[thing.name] = np.mean(thing.read(), 1)
-                except ValueError:
-                    calibData[thing.name] = thing.read()
-            else:
-                calibData[thing.name] = thing.read()
+    ext = os.path.splitext(pathToFile)[1]
 
-    calibFile.close()
+    if ext == '.mat':
+
+        mat = loadmat(pathToFile)
+
+        for k, v in zip(mat['data'].dtype.names, mat['data'][0, 0]):
+            if len(v.flatten()) == 1:
+                if isinstance(v[0], type(u'')):
+                    calibData[k] = str(v[0])
+                else:
+                    calibData[k] = float(v[0])
+            else:
+                if k in ['x', 'v']:
+                    if len(v.squeeze().shape) > 1:
+                        calibData[k] = v.mean(axis=0)
+                    else:
+                        calibData[k] = v.squeeze()
+                else:
+                    calibData[k] = v.squeeze()
+
+    elif ext == '.h5':
+
+        calibFile = tables.openFile(pathToFile)
+
+        for thing in calibFile.root.data:
+            if len(thing.read().flatten()) == 1:
+                calibData[thing.name] = thing.read()[0]
+            else:
+                if thing.name in ['x', 'v']:
+                    try:
+                        calibData[thing.name] = np.mean(thing.read(), 1)
+                    except ValueError:
+                        calibData[thing.name] = thing.read()
+                else:
+                    calibData[thing.name] = thing.read()
+
+        calibFile.close()
 
     return calibData
 

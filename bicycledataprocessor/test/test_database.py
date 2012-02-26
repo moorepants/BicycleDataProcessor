@@ -24,6 +24,26 @@ def test_run_id_string():
     for run in ids:
         assert database.run_id_string(run) == '00105'
 
+def test_get_calib_data():
+    """This just tests whether the .mat files return the same values as the .h5
+    files."""
+
+    runID = database.run_id_string(randint(0, 20))
+
+    pathToData = '/media/Data/Documents/School/UC Davis/Bicycle Mechanics/BicycleDAQ/data/CalibData'
+
+    matFile = os.path.join(pathToData, runID + '.mat')
+    h5File =  os.path.join(pathToData, 'h5', runID + '.h5')
+
+    matDat = database.get_calib_data(matFile)
+    h5Dat = database.get_calib_data(h5File)
+
+    for k, v in h5Dat.items():
+        if isinstance(v, type('')):
+            assert v == matDat[k]
+        else:
+            npt.assert_allclose(v, matDat[k])
+
 def test_get_run_data():
     """This just tests whether the .mat files return the same values as the .h5
     files."""
