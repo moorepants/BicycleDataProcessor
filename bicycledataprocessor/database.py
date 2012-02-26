@@ -4,6 +4,7 @@
 import os
 import re
 from operator import xor
+from ConfigParser import SafeConfigParser
 
 # debugging
 from IPython.core.debugger import Tracer
@@ -14,27 +15,60 @@ import numpy as np
 import tables
 from scipy.io import loadmat
 
+config = SafeConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), '..', 'defaults.cfg'))
+
 class DataSet(object):
 
-    def __init__(self, fileName='InstrumentedBicycleData.h5', pathToH5='../BicycleDAQ/data/h5',
-            pathToCorruption='data-corruption.csv'):
+    def __init__(self, **kwargs):
         """Creates the object and sets the filename.
 
         Parameters
         ----------
-        fileName : string
+        pathToDatabase : string, optional
             Path to the database file.
-        pathToH5 : string
-            Path to the directory containing the run h5 files.
-        pathToCorruption : string
+        pathToRunMat : string, optional
+            Path to the directory which contains the raw run mat files.
+        pathToCalibMat : string, optional
+            Path to the directory which contains the raw calibration mat files.
+        pathToRunH5 : string, optional
+            Path to the directory containing the the raw run h5 files.
+        pathToCalibH5 : string, optional
+            Path to the directory containing the the raw calibration h5 files.
+        pathToCorruption : string, optional
             The path to the data corruption csv file.
+
+        Notes
+        -----
+        If a keyword argument is not specified the values present in the
+        defaults.cfg data section will be used. The mat file directories will
+        always be used if present, only if it isn't will the H5 directories be
+        used.
 
         """
 
-        self.fileName = fileName
-        self.pathToH5 = pathToH5
-        self.pathToCalibH5 = os.path.join(self.pathToH5, '..', 'CalibData', 'h5')
-        self.pathToCorruption = pathToCorruption
+        acceptedKeywords = ['pathToDatabase', 'pathToRunMat', 'pathToCalibMat',
+            'pathToRunH5', 'pathToCalibH5', 'pathToCorruption']
+
+        for k in acceptedKeywords:
+            if k in kwargs.keys():
+                setattr(self, k, kwargs[k])
+            else:
+                setattr(self, k, config.get('data', k))
+
+        if self.pathToRunMat is not None:
+            self.pathToRun = self.pathToRunMat
+            self.runExt = '.mat'
+        else:
+            self.pathToRun = self.pathToRunH5
+            self.runExt = '.h5'
+
+        if self.pathToCalibMat is not None:
+            self.pathToCalib = self.pathToCalibMat
+            self.calibExt = '.mat'
+        else:
+            self.pathToCalib = self.pathToCalibH5
+            self.calibExt = '.h5'
 
         # these columns may be used in the future but for now there is no reason to
         # introduce them into the database
@@ -63,7 +97,7 @@ class DataSet(object):
         """Opens the HDF5 database. This accepts any keyword arguments that
         tables.openFile uses."""
 
-        self.database = tables.openFile(self.fileName, **kwargs)
+        self.database = tables.openFile(self.pathToDatabase, **kwargs)
 
     def close(self):
         """Closes the currently open HDF5 database."""
@@ -84,10 +118,10 @@ class DataSet(object):
 
         """
 
-        numRuns = len(sorted(os.listdir(self.pathToH5)))
+        numRuns = len(sorted(os.listdir(self.pathToRun)))
 
         # get two example runs
-        filteredRun, unfilteredRun = get_two_runs(self.pathToH5)
+        filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
 
         # generate the table description class
         RunTable = self.run_table_class(unfilteredRun)
@@ -149,7 +183,8 @@ class DataSet(object):
 
         """
 
-        numCalibs = len(sorted(os.listdir(self.pathToCalibH5)))
+
+        numCalibs = len(sorted(os.listdir(self.pathToCalib)))
 
         # generate the calibration table description class
         calibrationTable = self.calibration_table_class()
@@ -171,13 +206,13 @@ class DataSet(object):
 
         """
 
-        if os.path.exists(self.fileName):
+        if os.path.exists(self.pathToDatabase):
             response = raw_input(('{0} already exists.\n' +
-                'Do you want to overwrite it? (y or n)\n').format(self.fileName))
+                'Do you want to overwrite it? (y or n)\n').format(self.pathToDatabase))
             if response == 'y':
-                print("{0} will be overwritten".format(self.fileName))
+                print("{0} will be overwritten".format(self.pathToDatabase))
             else:
-                print("{0} was not overwritten.".format(self.fileName))
+                print("{0} was not overwritten.".format(self.pathToDatabase))
                 return
 
         print("Creating database...")
@@ -194,7 +229,7 @@ class DataSet(object):
 
         self.close()
 
-        print "{0} successfully created.".format(self.fileName)
+        print "{0} successfully created.".format(self.pathToDatabase)
 
     def sync_data(self, directory='exports/'):
         """Sync's data to the biosport website."""
@@ -401,7 +436,7 @@ class DataSet(object):
         row = signalTable.row
 
         # get two example runs
-        filteredRun, unfilteredRun = get_two_runs(self.pathToH5)
+        filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
 
         # remove the bridge signals (I haven't used them yet!)
         niCols = filteredRun['NICols']
@@ -473,11 +508,11 @@ class DataSet(object):
         row = calibrationTable.row
 
         # load the files from the h5 directory
-        files = sorted(os.listdir(self.pathToCalibH5))
+        files = sorted(os.listdir(self.pathToCalib))
 
         for f in files:
             print "Calibration file:", f
-            calibDict = get_calib_data(os.path.join(self.pathToCalibH5, f))
+            calibDict = get_calib_data(os.path.join(self.pathToCalib, f))
             for k, v in calibDict.items():
                 if k in ['x', 'y', 'v']:
                     row[k] = size_vector(v, 50)
@@ -527,7 +562,7 @@ class DataSet(object):
                 runTable.col('RunID')]
 
         # load the list of files from the h5 directory
-        files = sorted(os.listdir(self.pathToH5))
+        files = sorted(os.listdir(self.pathToRun))
         # remove the extensions
         directoryRuns = [os.path.splitext(x)[0] for x in files]
 
@@ -598,7 +633,7 @@ class DataSet(object):
 
             if yesOrNo == 'yes':
                 for row in runTable.where('RunID == {}'.format(str(int(runID)))):
-                    runData = get_run_data(os.path.join(self.pathToH5, runID + '.h5'))
+                    runData = get_run_data(os.path.join(self.pathToRun, runID + '.h5'))
                     fill_row(row, runData)
                     row.update()
                 # overwrite the arrays
@@ -621,7 +656,8 @@ class DataSet(object):
         for runID in runsToAppend:
             print('Appending run: {}'.format(runID))
 
-            runData = get_run_data(os.path.join(self.pathToH5, runID + '.h5'))
+            runData = get_run_data(os.path.join(self.pathToRun, runID +
+                self.runExt))
 
             fill_row(row, runData)
             row.append()
@@ -652,7 +688,7 @@ class DataSet(object):
         self.fill_calibration_table()
         self.fill_run_table()
 
-        print("{} is ready for action!".format(self.fileName))
+        print("{} is ready for action!".format(self.pathToDatabase))
 
     def load_corruption_data(self):
         """Returns a dictionary containing the contents of the provided data
@@ -687,20 +723,6 @@ class DataSet(object):
                         corruption['reason'].append('')
 
         return corruption
-
-    def add_runs(self):
-        self.open()
-
-        # get list of runs in database
-
-        # get list of runs in h5 folder
-        files = sorted(os.listdir(self.pathToH5))
-
-        # make list of runs to add
-
-        # add runs
-
-        self.close()
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -1021,19 +1043,19 @@ def vnav_checksum(vnStr):
     # the letter's need to be capitalized to match too
     return hexVal.upper()
 
-def get_two_runs(pathToH5):
+def get_two_runs(pathToRun):
     '''Gets the data from both a filtered and unfiltered run.'''
 
     # load in the data files
-    files = sorted(os.listdir(pathToH5))
+    files = sorted(os.listdir(pathToRun))
 
     # get an example filtered and unfiltered run (wrt to the VN-100 data)
-    filteredRun = get_run_data(os.path.join(pathToH5, files[0]))
+    filteredRun = get_run_data(os.path.join(pathToRun, files[0]))
     if filteredRun['par']['ADOT'] is not 14:
         raise ValueError('Run %d is not a filtered run, choose again' %
               filteredRun['par']['RunID'])
 
-    unfilteredRun = get_run_data(os.path.join(pathToH5, files[-1]))
+    unfilteredRun = get_run_data(os.path.join(pathToRun, files[-1]))
     if unfilteredRun['par']['ADOT'] is not 253:
         raise ValueError('Run %d is not a unfiltered run, choose again' %
               unfilteredRun['par']['RunID'])

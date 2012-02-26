@@ -5,6 +5,7 @@ import os
 import datetime
 from math import pi
 from warnings import warn
+from ConfigParser import SafeConfigParser
 
 # debugging
 from IPython.core.debugger import Tracer
@@ -26,8 +27,9 @@ import bicycleparameters as bp
 from database import get_row_num, get_cell, pad_with_zeros, run_id_string
 import signalprocessing as sigpro
 from bdpexceptions import TimeShiftError
-# this is just so you can import it in the main module, will be removed later
-from database import DataSet
+
+config = SafeConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), '..', 'defaults.cfg'))
 
 class Signal(np.ndarray):
     """
@@ -528,12 +530,11 @@ class Sensor():
         return self.data[dateIdPairs[i][0]]
 
 class Run():
-    """The fundamental class for a run."""
+    """The fluppin fundamental class for a run."""
 
-    def __init__(self, runid, dataset, pathToParameterData, forceRecalc=True,
+    def __init__(self, runid, dataset, pathToParameterData=None, forceRecalc=True,
             filterFreq=None):
-        """
-        Loads all the data for a run if available otherwise it generates the
+        """Loads all the data for a run if available otherwise it generates the
         data from the raw data.
 
         Parameters
@@ -543,7 +544,7 @@ class Run():
             leading zeros, e.g. '00005'.
         dataset : DataSet object
             A DataSet object with a full data set.
-        pathToParameterData : string
+        pathToParameterData : string, optional
             The is the path to the data directory for the BicycleParameters
             package.
         forceRecalc : boolean, optional
@@ -553,6 +554,9 @@ class Run():
             If true the computed signals will be low pass filtered.
 
         """
+
+        if pathToParameterData is None:
+            pathToParameterData = config.get('data', 'pathToParameters')
 
         print "Initializing the run object."
         # get the tables
