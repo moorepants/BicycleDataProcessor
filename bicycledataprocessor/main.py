@@ -612,7 +612,7 @@ class Run():
             con3 = maneuver != 'Static Calibration'
             if con1 and con2 and con3:
                 self.compute_time_shift()
-                self.check_time_shift(0.1)
+                self.check_time_shift(0.15)
                 # truncate and spline all of the calibrated signals
                 self.truncate_signals()
 
