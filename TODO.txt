@@ -1,12 +1,11 @@
-- split runs with multiple perturbations
-- Integrate yaw angle for lane change runs in the gym
-- Make sure calcs work for most runs otherwise give warnings or errors
-- Write documentation
-- the time sync didn't work on run 466-470
-- the lateral force is not always centered at zero, for example # 486, need a
+- Split runs with multiple perturbations
+- The time sync didn't work on run 466-470
+- The lateral force is not always centered at zero, for example # 486, need a
   way to fix that
 - 158, 159, 162, 163, 167, 168 should be "Balance"
 - I'm missing videos 295-325
-- the knee does not seem to come off in Run 309, change the note
+- The knee does not seem to come off in Run 309, change the note
 - Run 584 Charlie forgot to hold his knees in, it is a nice demo of how much we
   move our knees laterally
+- Check the time syncrhonization on runs 194, 195, 196, 197, 198, 433, 436,
+  437, 439, 451
