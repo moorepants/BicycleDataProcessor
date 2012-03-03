@@ -8,8 +8,12 @@ from warnings import warn
 from ConfigParser import SafeConfigParser
 
 # debugging
-from IPython.core.debugger import Tracer
-set_trace = Tracer()
+try:
+    from IPython.core.debugger import Tracer
+except ImportError:
+    pass
+else:
+    set_trace = Tracer()
 
 # dependencies
 import numpy as np
@@ -726,6 +730,11 @@ class Run():
         vnAcc = self.calibratedSignals['AccelerationZ']
         vnAcc = vnAcc.truncate(self.tau).spline()
         niAcc = niAcc.truncate(self.tau).spline()
+        # todo: this should probably check the rms of the mean subtracted data
+        # because both accelerometers don't always give the same value, this
+        # may work better with a filtered signal too
+        # todo: this should probably be moved into the time shift code in the
+        # signalprocessing model
         nrms = np.sqrt(np.mean((vnAcc + niAcc)**2)) / (niAcc.max() - niAcc.min())
         if nrms > maxNRMS:
             raise TimeShiftError(('The normalized root mean square for this ' +
