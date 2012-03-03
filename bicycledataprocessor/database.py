@@ -117,8 +117,9 @@ class DataSet(object):
         The database must be open with write permission.
 
         """
+        files = list_files_in_dir(self.pathToRun)
 
-        numRuns = len(sorted(os.listdir(self.pathToRun)))
+        numRuns = len(files)
 
         # get two example runs
         filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
@@ -128,7 +129,7 @@ class DataSet(object):
 
         # add the data table to the root group
         self.create_table('/', 'runTable',
-            RunTable, 'Run Information', expectedrows=(numRuns + 50))
+            RunTable, 'Run Information', expectedrows=(numRuns + 100))
 
     def create_table(self, *args, **kwargs):
         """Creates an empty table at the root.
@@ -183,8 +184,9 @@ class DataSet(object):
 
         """
 
+        files = list_files_in_dir(self.pathToCalib)
 
-        numCalibs = len(sorted(os.listdir(self.pathToCalib)))
+        numCalibs = len(files)
 
         # generate the calibration table description class
         calibrationTable = self.calibration_table_class()
@@ -508,7 +510,7 @@ class DataSet(object):
         row = calibrationTable.row
 
         # load the files from the h5 directory
-        files = sorted(os.listdir(self.pathToCalib))
+        files = list_files_in_dir(self.pathToCalib)
 
         for f in files:
             print "Calibration file:", f
@@ -562,7 +564,7 @@ class DataSet(object):
                 runTable.col('RunID')]
 
         # load the list of files from the h5 directory
-        files = sorted(os.listdir(self.pathToRun))
+        files = list_files_in_dir(self.pathToRun)
         # remove the extensions
         directoryRuns = [os.path.splitext(x)[0] for x in files]
 
@@ -1047,7 +1049,7 @@ def get_two_runs(pathToRun):
     '''Gets the data from both a filtered and unfiltered run.'''
 
     # load in the data files
-    files = sorted(os.listdir(pathToRun))
+    files = list_files_in_dir(pathToRun)
 
     # get an example filtered and unfiltered run (wrt to the VN-100 data)
     filteredRun = get_run_data(os.path.join(pathToRun, files[0]))
@@ -1252,3 +1254,16 @@ def pad_with_zeros(num, digits):
         num = '0' + num
 
     return num
+
+def list_files_in_dir(path):
+    """Creates a list of mat or h5 files in a directory and sorts them by
+    name."""
+
+    inDir = os.listdir(path)
+    files = []
+    for thing in inDir:
+        if thing.endswith('.mat') or thing.endswith('.h5'):
+            files.append(thing)
+    files.sort()
+
+    return files
