@@ -16,7 +16,7 @@ likely work with other versions.
 
 - `Python 2.7.1`__
 .. __: http://www.python.org
-- `Scipy 0.9.0`__
+- `Scipy 0.10.0`__
 .. __: http://www.scipy.org
 - `Numpy 1.5.1`__
 .. __: http://numpy.scipy.org
@@ -43,16 +43,15 @@ http://mae.ucdavis.edu/~biosport/InstrumentedBicycleData/InstrumentedBicycleData
 Uncompress the file into your `BicycleDataProcessor` directory, the file is
 ready for use. Open a python command prompt and import the module::
 
-    >>> import bicycledataprocessor.main as bdp
+    >>> import bicycledataprocessor as bdp
 
 First load the database as read-only::
 
     >>> dataset = bdp.DataSet()
-    >>> dataset.open()
 
 Now load a run::
 
-    >>> run = bdp.Run('00105', dataset.database, <pathToParameterData>, filterSigs=True)
+    >>> run = bdp.Run('00105', dataset, <pathToParameterData>, filterSigs=True)
 
 The `<pathToParameterData>` needs to point to the data directory associated
 with the BicycleParameters module and should contain Jason, Luke, Charlie and
@@ -61,7 +60,7 @@ signals to remove some of the noise, it is optional.
 
 Check to make sure the data was properly time synchronized::
 
-    >>> run.plot('AccelerationZ', '-AccelerometerAccelerationY', signalType='truncated')
+    >>> run.verify_time_sync()
 
 The graph that appears shows the mostly downward acceleration signals from the
 two accelerometers. These signals are used to synchronize the NI USB-2008 and
@@ -117,7 +116,7 @@ file. Use the m-file `tools/fill_h5.m` to convert the runs and calibration data
 into HDF5 files. Then use this module to create the database and fill it with
 the data. First create an empty database file in the current directory.::
 
-    >>> import bicycledataprocessor.main as bdp
+    >>> import bicycledataprocessor as bdp
     >>> dataset = bdp.DataSet()
     >>> dataset.create_database()
 
