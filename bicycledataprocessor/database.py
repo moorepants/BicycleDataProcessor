@@ -658,26 +658,31 @@ class DataSet(object):
         for runID in runsToAppend:
             print('Appending run: {}'.format(runID))
 
-            runData = get_run_data(os.path.join(self.pathToRun, runID +
-                self.runExt))
+            try:
+                runData = get_run_data(os.path.join(self.pathToRun, runID +
+                    self.runExt))
+            except ValueError:
+                # I'm getting a scipy.io.loadmat issue "total size of new array
+                # must be unchanged"
+                pass
+            else:
+                fill_row(row, runData)
+                row.append()
 
-            fill_row(row, runData)
-            row.append()
+                # store the time series data in arrays
+                runGroup = self.database.createGroup(self.database.root.rawData,
+                        runID)
+                for i, col in enumerate(runData['NICols']):
+                    if col not in self.ignoredNICols:
+                        try:
+                            self.database.createArray(runGroup, col,
+                                runData['NIData'][i])
+                        except IndexError:
+                            print("{} not measured in this run.".format(col))
 
-            # store the time series data in arrays
-            runGroup = self.database.createGroup(self.database.root.rawData,
-                    runID)
-            for i, col in enumerate(runData['NICols']):
-                if col not in self.ignoredNICols:
-                    try:
-                        self.database.createArray(runGroup, col,
-                            runData['NIData'][i])
-                    except IndexError:
-                        print("{} not measured in this run.".format(col))
-
-            for i, col in enumerate(runData['VNavCols']):
-                self.database.createArray(runGroup, col,
-                        runData['VNavData'][i])
+                for i, col in enumerate(runData['VNavCols']):
+                    self.database.createArray(runGroup, col,
+                            runData['VNavData'][i])
 
         runTable.flush()
 
