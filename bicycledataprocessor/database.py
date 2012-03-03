@@ -793,9 +793,13 @@ def get_row_num(runid, table):
         The row number for runid.
 
     '''
-    # the row number should be the same as the run id but there is a
-    # possibility that it isn't
-    rownum = table[int(runid)]['RunID']
+    # if the row number happens to correspond to the RunID, then try the quick
+    # calculation, otherwise search for it
+    try:
+        rownum = table[int(runid)]['RunID']
+    except IndexError:
+        rownum = None
+
     if rownum != int(runid):
         rownum = [x.nrow for x in table.iterrows()
                   if x['RunID'] == int(runid)][0]
