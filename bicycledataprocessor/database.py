@@ -97,6 +97,105 @@ class DataSet(object):
                               'tau',
                               'YawRate']
 
+    def _calibration_table_class(self):
+        """Creates a class that is used to describe the table containing the
+        calibration data.
+
+        Returns
+        -------
+        CalibrationTable : class
+            Table description class for pytables with columns defined.
+
+        """
+
+        class CalibrationTable(tables.IsDescription):
+            accuracy = tables.StringCol(10)
+            bias = tables.Float32Col(dflt=np.nan)
+            calibrationID = tables.StringCol(5)
+            calibrationSupplyVoltage = tables.Float32Col(dflt=np.nan)
+            name = tables.StringCol(20)
+            notes = tables.StringCol(500)
+            offset = tables.Float32Col(dflt=np.nan)
+            runSupplyVoltage = tables.Float32Col(dflt=np.nan)
+            runSupplyVoltageSource = tables.StringCol(10)
+            rsq = tables.Float32Col(dflt=np.nan)
+            sensorType = tables.StringCol(20)
+            signal = tables.StringCol(26)
+            slope = tables.Float32Col(dflt=np.nan)
+            timeStamp = tables.StringCol(21)
+            units = tables.StringCol(20)
+            v = tables.Float32Col(shape=(50,))
+            x = tables.Float32Col(shape=(50,))
+            y = tables.Float32Col(shape=(50,))
+
+        return CalibrationTable
+
+    def _run_table_class(self, run):
+        '''Returns a class that is used for the table description for raw data
+        for each run.
+
+        Parameters
+        ----------
+        run : dict
+            Contains the python dictionary of a run.
+
+        Returns
+        -------
+        RunTable : class
+            Table description class for pytables with columns defined.
+
+        '''
+
+        # set up the table description
+        class RunTable(tables.IsDescription):
+            for i, (key, val) in enumerate(run['par'].items()):
+                if isinstance(val, type(1)):
+                    exec(key + " = tables.Int32Col(pos=i)")
+                elif isinstance(val, type('')):
+                    exec(key + " = tables.StringCol(itemsize=300, pos=i)")
+                elif isinstance(val, type(1.)):
+                    exec(key + " = tables.Float32Col(pos=i)")
+                elif isinstance(val, type(np.ones(1))):
+                    exec(key + " = tables.Float32Col(shape=(" + str(len(val)) +
+                            ", ), pos=i)")
+                # a marker that declares the data corrupt or unusable
+                corrupt = tables.BoolCol()
+                # a market that declares the data quiestionable
+                warning = tables.BoolCol()
+                # mark a disturbance in the run that hand either a knee come
+                # off, the handlebar touch the treadmill sides or the trailer
+                # hit the side of the treadmill. There should never be any more
+                # that 15 disturbances per run
+                knee = tables.BoolCol(shape=(15))
+                handlebar = tables.BoolCol(shape=(15))
+                trailer = tables.BoolCol(shape=(15))
+
+            # get rid intermediate variables so they are not stored in the class
+            del(i, key, val)
+
+        return RunTable
+
+    def _signal_table_class(self):
+        """Creates a class that is used to describe the table containing
+        information about the signals.
+
+        Returns
+        -------
+        CalibrationTable : class
+            Table description class for pytables with columns defined.
+
+        """
+
+        class SignalTable(tables.IsDescription):
+            calibration = tables.StringCol(20)
+            isRaw = tables.BoolCol()
+            sensor = tables.StringCol(20)
+            signal = tables.StringCol(20)
+            source = tables.StringCol(2)
+            units = tables.StringCol(20)
+
+        return SignalTable
+
     def open(self, **kwargs):
         """Opens the HDF5 database. This accepts any keyword arguments that
         tables.openFile uses."""
@@ -129,7 +228,7 @@ class DataSet(object):
         filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
 
         # generate the table description class
-        RunTable = self.run_table_class(unfilteredRun)
+        RunTable = self._run_table_class(unfilteredRun)
 
         # add the data table to the root group
         self.create_table('/', 'runTable',
@@ -174,7 +273,7 @@ class DataSet(object):
         """
 
         # generate the signal table description class
-        SignalTable = self.signal_table_class()
+        SignalTable = self._signal_table_class()
 
         self.create_table('/', 'signalTable',
                 SignalTable, 'Signal Information', expectedrows=50)
@@ -193,7 +292,7 @@ class DataSet(object):
         numCalibs = len(files)
 
         # generate the calibration table description class
-        calibrationTable = self.calibration_table_class()
+        calibrationTable = self._calibration_table_class()
 
         # add the calibration table to the root group
         self.create_table('/', 'calibrationTable',
@@ -328,105 +427,6 @@ class DataSet(object):
 
         self.close()
 
-    def signal_table_class(self):
-        """Creates a class that is used to describe the table containing
-        information about the signals.
-
-        Returns
-        -------
-        CalibrationTable : class
-            Table description class for pytables with columns defined.
-
-        """
-
-        class SignalTable(tables.IsDescription):
-            calibration = tables.StringCol(20)
-            isRaw = tables.BoolCol()
-            sensor = tables.StringCol(20)
-            signal = tables.StringCol(20)
-            source = tables.StringCol(2)
-            units = tables.StringCol(20)
-
-        return SignalTable
-
-    def calibration_table_class(self):
-        """Creates a class that is used to describe the table containing the
-        calibration data.
-
-        Returns
-        -------
-        CalibrationTable : class
-            Table description class for pytables with columns defined.
-
-        """
-
-        class CalibrationTable(tables.IsDescription):
-            accuracy = tables.StringCol(10)
-            bias = tables.Float32Col(dflt=np.nan)
-            calibrationID = tables.StringCol(5)
-            calibrationSupplyVoltage = tables.Float32Col(dflt=np.nan)
-            name = tables.StringCol(20)
-            notes = tables.StringCol(500)
-            offset = tables.Float32Col(dflt=np.nan)
-            runSupplyVoltage = tables.Float32Col(dflt=np.nan)
-            runSupplyVoltageSource = tables.StringCol(10)
-            rsq = tables.Float32Col(dflt=np.nan)
-            sensorType = tables.StringCol(20)
-            signal = tables.StringCol(26)
-            slope = tables.Float32Col(dflt=np.nan)
-            timeStamp = tables.StringCol(21)
-            units = tables.StringCol(20)
-            v = tables.Float32Col(shape=(50,))
-            x = tables.Float32Col(shape=(50,))
-            y = tables.Float32Col(shape=(50,))
-
-        return CalibrationTable
-
-    def run_table_class(self, run):
-        '''Returns a class that is used for the table description for raw data
-        for each run.
-
-        Parameters
-        ----------
-        run : dict
-            Contains the python dictionary of a run.
-
-        Returns
-        -------
-        RunTable : class
-            Table description class for pytables with columns defined.
-
-        '''
-
-        # set up the table description
-        class RunTable(tables.IsDescription):
-            for i, (key, val) in enumerate(run['par'].items()):
-                if isinstance(val, type(1)):
-                    exec(key + " = tables.Int32Col(pos=i)")
-                elif isinstance(val, type('')):
-                    exec(key + " = tables.StringCol(itemsize=300, pos=i)")
-                elif isinstance(val, type(1.)):
-                    exec(key + " = tables.Float32Col(pos=i)")
-                elif isinstance(val, type(np.ones(1))):
-                    exec(key + " = tables.Float32Col(shape=(" + str(len(val)) +
-                            ", ), pos=i)")
-                # a marker that declares the data corrupt or unusable
-                corrupt = tables.BoolCol()
-                # a market that declares the data quiestionable
-                warning = tables.BoolCol()
-                # mark a disturbance in the run that hand either a knee come
-                # off, the handlebar touch the treadmill sides or the trailer
-                # hit the side of the treadmill. There should never be any more
-                # that 15 disturbances per run
-                knee = tables.BoolCol(shape=(15))
-                handlebar = tables.BoolCol(shape=(15))
-                trailer = tables.BoolCol(shape=(15))
-
-            # get rid intermediate variables so they are not stored in the class
-            del(i, key, val)
-
-        return RunTable
-
     def fill_signal_table(self):
         """Writes data to the signal information table."""
 
@@ -527,6 +527,51 @@ class DataSet(object):
             row.append()
 
         calibrationTable.flush()
+
+        self.close()
+
+    def update_corrupt(self):
+        """Updates the run table to reflect the latest values in the corruption
+        file."""
+
+        # load the corruption data
+        corruption = self.load_corruption_data()
+
+        # make sure the database is open for appending
+        try:
+            self.database
+        except:
+            pass
+        else:
+            self.close()
+
+        self.open(mode='a')
+
+        for row in self.database.root.runTable.iterrows():
+            if row['RunID'] in corruption['runid']:
+                index = corruption['runid'].index(row['RunID'])
+
+                for col in ['corrupt', 'warning']:
+                    row[col] = corruption[col][index]
+
+                for col in ['knee', 'handlebar', 'trailer']:
+                    default = np.zeros(15, dtype=np.bool)
+                    default[corruption[col][index]] = True
+                    row[col] = default
+
+                row.update()
+                print('Updated the corruption data for run ' + row['RunID'])
+            else:
+                # set everything to default
+                for col in ['corrupt', 'warning']:
+                    row[col] = False
+
+                for col in ['knee', 'handlebar', 'trailer']:
+                    row[col] = np.zeros(15, dtype=np.bool)
+
+                row.update()
+                print('Corruption data for ' + row['RunID'] +
+                        ' set to default.')
 
         self.close()
 
@@ -639,7 +684,8 @@ class DataSet(object):
 
             if yesOrNo == 'yes':
                 for row in runTable.where('RunID == {}'.format(str(int(runID)))):
-                    runData = get_run_data(os.path.join(self.pathToRun, runID + '.h5'))
+                    runData = get_run_data(os.path.join(self.pathToRun, runID +
+                        self.runExt))
                     fill_row(row, runData)
                     row.update()
                 # overwrite the arrays
@@ -647,10 +693,10 @@ class DataSet(object):
                 for i, col in enumerate(runData['NICols']):
                     if col not in self.ignoredNICols:
                         timeSeries = runGroup._f_getChild(col)
-                        timeSeries = runData['NIData'][i]
+                        timeSeries[:] = runData['NIData'][i]
                 for i, col in enumerate(runData['VNavCols']):
                     timeSeries = runGroup._f_getChild(col)
-                    timeSeries = runData['VNavData'][i]
+                    timeSeries[:] = runData['VNavData'][i]
                 print('Overwrote run {}.'.format(runID))
             else:
                 print('Did not overwrite run {}.'.format(runID))
