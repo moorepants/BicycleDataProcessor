@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 
-from IPython.core.debugger import Tracer
+try:
+    from IPython.core.debugger import Tracer
+except ImportError:
+    pass
+else:
+    set_trace = Tracer()
 set_trace = Tracer()
+
 from warnings import warn
 
 # dependencies
