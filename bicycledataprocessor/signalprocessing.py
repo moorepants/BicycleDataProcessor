@@ -6,7 +6,6 @@ except ImportError:
     pass
 else:
     set_trace = Tracer()
-set_trace = Tracer()
 
 from warnings import warn
 
