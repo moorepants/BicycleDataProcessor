@@ -6,7 +6,7 @@ import re
 from operator import xor
 from ConfigParser import SafeConfigParser
 
-# debugging
+# I use this for debugging in IPython if available.
 try:
     from IPython.core.debugger import Tracer
 except ImportError:
@@ -60,6 +60,8 @@ class DataSet(object):
             else:
                 setattr(self, k, config.get('data', k))
 
+        # This class has the ability to load data from mat files or h5 files.
+        # The preference is mat files.
         if self.pathToRunMat is not None:
             self.pathToRun = self.pathToRunMat
             self.runExt = '.mat'
@@ -94,8 +96,28 @@ class DataSet(object):
                               'SteerAngle',
                               'SteerRate',
                               'SteerTorque',
-                              'tau',
+                              'tau', # why tau?
                               'YawRate']
+
+    def _task_table_class(self):
+        """Creates a class that is used to describe the table containing meta
+        data for the processed task signals.
+
+        Returns
+        -------
+        TaskTable : tables.IsDescription
+
+        """
+
+        class TaskTable(tables.IsDescription):
+            Duration = tables.Float32Col(dflt=0.)
+            FilterFrequency = tables.Float32Col(dflt=0.)
+            MeanSpeed = tables.Float32Col(dflt=0.)
+            RunID = tables.Int32Col(dflt=0)
+            StdSpeed = tables.Float32Col(dflt=0.)
+            Tau = tables.Float32Col(dflt=0.)
+
+        return TaskTable
 
     def _calibration_table_class(self):
         """Creates a class that is used to describe the table containing the
@@ -196,109 +218,6 @@ class DataSet(object):
 
         return SignalTable
 
-    def open(self, **kwargs):
-        """Opens the HDF5 database. This accepts any keyword arguments that
-        tables.openFile uses."""
-
-        self.database = tables.openFile(self.pathToDatabase, **kwargs)
-
-    def close(self):
-        """Closes the currently open HDF5 database."""
-
-        try:
-            self.database.close()
-        except AttributeError:
-            print('The database is not open.')
-        else:
-            del self.database
-
-    def create_run_table(self):
-        """Creates an empty run information table.
-
-        Notes
-        -----
-        The database must be open with write permission.
-
-        """
-        files = list_files_in_dir(self.pathToRun)
-
-        numRuns = len(files)
-
-        # get two example runs
-        filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
-
-        # generate the table description class
-        RunTable = self._run_table_class(unfilteredRun)
-
-        # add the data table to the root group
-        self.create_table('/', 'runTable',
-            RunTable, 'Run Information', expectedrows=(numRuns + 100))
-
-    def create_table(self, *args, **kwargs):
-        """Creates an empty table at the root.
-
-        Notes
-        -----
-        This excepts the same arguments as createTable. The database must be
-        open with write permission.
-
-        """
-        where = args[0]
-        name = args[1]
-        # add the signal table to the root group
-        try:
-            table = self.database.createTable(*args, **kwargs)
-        except tables.NodeError:
-            response = raw_input('{} already exists.\n'.format(name) +
-                'Do you want to overwrite it? (y or n)\n')
-            if response == 'y':
-                print("{} will be overwritten.".format(name))
-                self.database.removeNode(where, name)
-                table = self.database.createTable(*args, **kwargs)
-                table.flush()
-            else:
-                print("Aborted, {} was not overwritten.".format(name))
-        except AttributeError:
-            print('The database is not open for writing.')
-        else:
-            table.flush()
-
-    def create_signal_table(self):
-        """Creates an empty signal information table.
-
-        Notes
-        -----
-        The database must be open with write permission.
-
-        """
-
-        # generate the signal table description class
-        SignalTable = self._signal_table_class()
-
-        self.create_table('/', 'signalTable',
-                SignalTable, 'Signal Information', expectedrows=50)
-
-    def create_calibration_table(self):
-        """Creates an empty calibration table.
-
-        Notes
-        -----
-        The database must be open with write permission.
-
-        """
-
-        files = list_files_in_dir(self.pathToCalib)
-
-        numCalibs = len(files)
-
-        # generate the calibration table description class
-        calibrationTable = self._calibration_table_class()
-
-        # add the calibration table to the root group
-        self.create_table('/', 'calibrationTable',
-            calibrationTable, 'Calibration Information',
-            expectedrows=(numCalibs + 10))
-
     def create_database(self, compression=False):
         """Creates an HDF5 file for data collected from the instrumented
         bicycle.
@@ -326,18 +245,127 @@ class DataSet(object):
 
         # create a new hdf5 file ready for writing
         self.open(mode='w', title='Instrumented Bicycle Data')
+        self.close()
 
         # initialize all of the tables
         self.create_run_table()
         self.create_signal_table()
         self.create_calibration_table()
-
-        self.close()
+        self.create_task_table()
 
         print "{0} successfully created.".format(self.pathToDatabase)
 
+    def open(self, **kwargs):
+        """Opens the HDF5 database. This accepts any keyword arguments that
+        tables.openFile uses."""
+
+        self.database = tables.openFile(self.pathToDatabase, **kwargs)
+
+    def close(self):
+        """Closes the currently open HDF5 database."""
+
+        try:
+            self.database.close()
+        except AttributeError:
+            print('The database is not open.')
+        else:
+            del self.database
+
+    def create_table(self, *args, **kwargs):
+        """Creates an empty table at the root.
+
+        Notes
+        -----
+        This is a wrappre to tables.createTable and excepts the same arguments as tables.createTable.
+
+        """
+        try:
+            self.database
+        except AttributeError:
+            self.open(mode='a')
+        else:
+            self.close()
+            self.open(mode='a')
+
+        where = args[0]
+        name = args[1]
+        # add the signal table to the root group
+        try:
+            table = self.database.createTable(*args, **kwargs)
+        except tables.NodeError:
+            response = raw_input('{} already exists.\n'.format(name) +
+                'Do you want to overwrite it? (y or n)\n')
+            if response == 'y':
+                print("{} will be overwritten.".format(name))
+                self.database.removeNode(where, name)
+                table = self.database.createTable(*args, **kwargs)
+                table.flush()
+            else:
+                print("Aborted, {} was not overwritten.".format(name))
+        else:
+            table.flush()
+
+        self.close()
+
+    def create_run_table(self):
+        """Creates an empty run information table."""
+
+        files = list_files_in_dir(self.pathToRun)
+
+        numRuns = len(files)
+
+        # get two example runs
+        filteredRun, unfilteredRun = get_two_runs(self.pathToRun)
+
+        # generate the table description class
+        RunTable = self._run_table_class(unfilteredRun)
+
+        # add the data table to the root group
+        self.create_table('/', 'runTable',
+            RunTable, 'Run Information', expectedrows=(numRuns + 100))
+
+        self.close()
+
+    def create_signal_table(self):
+        """Creates an empty signal information table."""
+
+        # generate the signal table description class
+        SignalTable = self._signal_table_class()
+
+        self.create_table('/', 'signalTable',
+                SignalTable, 'Signal Information', expectedrows=50)
+
+    def create_calibration_table(self):
+        """Creates an empty calibration table."""
+
+        files = list_files_in_dir(self.pathToCalib)
+
+        numCalibs = len(files)
+
+        # generate the calibration table description class
+        calibrationTable = self._calibration_table_class()
+
+        # add the calibration table to the root group
+        self.create_table('/', 'calibrationTable',
+            calibrationTable, 'Calibration Information',
+            expectedrows=(numCalibs + 10))
+
+    def create_task_table(self):
+        """Creates an empty task table."""
+
+        taskTable = self._task_table_class()
+        self.create_table('/', 'taskTable', taskTable,
+            'Processed task signal meta data', expectedrows=1000)
+        # delete any arrays that may be there too
+        self.open(mode='a')
+        try:
+            self.database.root.taskData._f_remove(recursive=True)
+        except tables.NoSuchNodeError:
+            pass
+        self.close()
+
     def sync_data(self, directory='exports/'):
-        """Sync's data to the biosport website."""
+        """Synchronizes data to the biosport website."""
         user = 'biosport'
         host = 'mae.ucdavis.edu'
         remoteDir = '/home/grads/biosport/public_html/InstrumentedBicycleData/ProcessedData/'
@@ -426,6 +454,15 @@ class DataSet(object):
         f.close()
 
         self.close()
+
+    def fill_all_tables(self):
+        """Writes data to all of the tables."""
+
+        self.fill_signal_table()
+        self.fill_calibration_table()
+        self.fill_run_table()
+
+        print("{} is ready for action!".format(self.pathToDatabase))
 
     def fill_signal_table(self):
         """Writes data to the signal information table."""
@@ -527,51 +564,6 @@ class DataSet(object):
             row.append()
 
         calibrationTable.flush()
-
-        self.close()
-
-    def update_corrupt(self):
-        """Updates the run table to reflect the latest values in the corruption
-        file."""
-
-        # load the corruption data
-        corruption = self.load_corruption_data()
-
-        # make sure the database is open for appending
-        try:
-            self.database
-        except:
-            pass
-        else:
-            self.close()
-
-        self.open(mode='a')
-
-        for row in self.database.root.runTable.iterrows():
-            if row['RunID'] in corruption['runid']:
-                index = corruption['runid'].index(row['RunID'])
-
-                for col in ['corrupt', 'warning']:
-                    row[col] = corruption[col][index]
-
-                for col in ['knee', 'handlebar', 'trailer']:
-                    default = np.zeros(15, dtype=np.bool)
-                    default[corruption[col][index]] = True
-                    row[col] = default
-
-                row.update()
-                print('Updated the corruption data for run ' + row['RunID'])
-            else:
-                # set everything to default
-                for col in ['corrupt', 'warning']:
-                    row[col] = False
-
-                for col in ['knee', 'handlebar', 'trailer']:
-                    row[col] = np.zeros(15, dtype=np.bool)
-
-                row.update()
-                print('Corruption data for ' + row['RunID'] +
-                        ' set to default.')
 
         self.close()
 
@@ -738,14 +730,62 @@ class DataSet(object):
 
         self.close()
 
-    def fill_all_tables(self):
-        """Writes data to all of the tables."""
+    def add_task_signals(self, taskSignals, meta):
+        """Writes processed task signals to the data base.
 
-        self.fill_signal_table()
-        self.fill_calibration_table()
-        self.fill_run_table()
+        Parameters
+        ----------
+        taskSignals : dictionary
+            A dictionary of Signal objects.
+        meta : dictionary
+            The should contain the RunID, Tau, Duration, MeanSpeed, StdSpeed.
 
-        print("{} is ready for action!".format(self.pathToDatabase))
+        """
+        try:
+            self.database
+        except AttributeError:
+            self.close()
+            self.open(mode='a')
+        else:
+            if self.database.mode != 'a':
+                self.close()
+                self.open(mode='a')
+
+        taskTable = self.database.root.taskTable
+
+        try:
+            taskData = self.database.root.taskData
+        except tables.NoSuchNodeError:
+            taskData = self.database.createGroup('/', 'taskData')
+
+        # if the run isn't in the table, then append it, if it is then overwite
+        # it
+        if meta['RunID'] in taskTable.cols.RunID:
+            for row in taskTable.where('RunID == {}'.format(str(int(meta['RunID'])))):
+                for k, v in meta.items():
+                    row[k] = v
+                row.update()
+            runGroup = taskData._f_getChild(run_id_string(meta['RunID']))
+            for name, sig in taskSignals.items():
+                timeSeries = runGroup._f_getChild(name)
+                timeSeries[:] = sig
+                for attr in ['units', 'name', 'runid', 'sampleRate', 'source']:
+                    timeSeries._f_setAttr(attr, getattr(sig, attr))
+        else:
+            for k, v in meta.items():
+                taskTable.row[k] = v
+            taskTable.row.append()
+
+            # store all of the task signals as arrays
+            taskGroup = self.database.createGroup(self.database.root.taskData,
+                    run_id_string(meta['RunID']))
+            for name, sig in taskSignals.items():
+                arr = self.database.createArray(taskGroup, name, sig)
+                for attr in ['units', 'name', 'runid', 'sampleRate', 'source']:
+                    arr._f_setAttr(attr, getattr(sig, attr))
+            taskTable.flush()
+
+        self.close()
 
     def load_corruption_data(self):
         """Returns a dictionary containing the contents of the provided data
@@ -780,6 +820,52 @@ class DataSet(object):
                         corruption['reason'].append('')
 
         return corruption
+
+    def update_corrupt(self):
+        """Updates the run table to reflect the latest values in the corruption
+        file."""
+
+        # load the corruption data
+        corruption = self.load_corruption_data()
+
+        # make sure the database is open for appending
+        try:
+            self.database
+        except:
+            pass
+        else:
+            self.close()
+
+        self.open(mode='a')
+
+        for row in self.database.root.runTable.iterrows():
+            if row['RunID'] in corruption['runid']:
+                index = corruption['runid'].index(row['RunID'])
+
+                for col in ['corrupt', 'warning']:
+                    row[col] = corruption[col][index]
+
+                for col in ['knee', 'handlebar', 'trailer']:
+                    default = np.zeros(15, dtype=np.bool)
+                    default[corruption[col][index]] = True
+                    row[col] = default
+
+                row.update()
+                print('Updated the corruption data for run ' + row['RunID'])
+            else:
+                # set everything to default
+                for col in ['corrupt', 'warning']:
+                    row[col] = False
+
+                for col in ['knee', 'handlebar', 'trailer']:
+                    row[col] = np.zeros(15, dtype=np.bool)
+
+                row.update()
+                print('Corruption data for ' + row['RunID'] +
+                        ' set to default.')
+
+        self.close()
+
 
 def get_cell(datatable, colname, rownum):
     '''
@@ -835,7 +921,7 @@ def get_row_num(runid, table):
     runid : int or string
         The run id.
     table : pytable
-        The run data table.
+        A table which has a `RunID` column with run id integers.
 
     Returns
     -------
