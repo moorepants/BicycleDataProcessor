@@ -619,13 +619,13 @@ class Run():
         except NoSuchNodeError:
             forceRecalc = True
         else:
-            taskRowNum = get_row_num(runid, taskTable)
-            storedFreq = taskTable.cols.FilterFrequency[taskRowNum]
-            self.taskSignals = {}
             # The filter frequency stored in the task table is either a nan
             # value or a valid float. If the stored filter frequency is not the
             # same as the the one passed to Run, then a recalculation should be
             # forced.
+            taskRowNum = get_row_num(runid, taskTable)
+            storedFreq = taskTable.cols.FilterFrequency[taskRowNum]
+            self.taskSignals = {}
             if filterFreq is None:
                 newFilterFreq = np.nan
             else:
@@ -656,20 +656,21 @@ class Run():
                 pass
             self.process_raw_signals()
 
+        dataset.close()
+
+        # store the task signals in the database if they are newly computed
         if (store == True and self.taskFromDatabase == False
                 and self.topSig == 'task'):
             taskMeta = {
                         'Duration' :
                         self.taskSignals['ForwardSpeed'].time()[-1],
-                        'FilterFrequency' : filterFreq,
+                        'FilterFrequency' : self.filterFreq,
                         'MeanSpeed' : self.taskSignals['ForwardSpeed'].mean(),
                         'RunID' : self.metadata['RunID'],
                         'StdSpeed' : self.taskSignals['ForwardSpeed'].std(),
                         'Tau' : self.tau,
                         }
             dataset.add_task_signals(self.taskSignals, taskMeta)
-
-        dataset.close()
 
         # tell the user about the run
         print self
@@ -681,6 +682,8 @@ class Run():
         print "Computing signals from raw data."
         self.calibrate_signals()
 
+        # the following maneuvers should never be calculated beyond the
+        # calibrated signals
         maneuver = self.metadata['Maneuver']
         con1 = maneuver != 'Steer Dynamics Test'
         con2 = maneuver != 'System Test'
@@ -688,12 +691,8 @@ class Run():
         if con1 and con2 and con3:
             self.compute_time_shift()
             self.check_time_shift(0.15)
-            # truncate and spline all of the calibrated signals
             self.truncate_signals()
-
-            # transfer some of the signals to computed
             self.compute_signals()
-
             self.task_signals()
 
         if self.filterFreq is not None:
@@ -1199,10 +1198,9 @@ class Run():
                     'for {}'.format(rider))
 
         # force a recalculation (but not the period calcs, they take too long)
-        self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData,
-                forceRawCalc=True)
+        self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData)
         # force a recalculation of the human parameters
-        self.bicycle.add_rider(rider, reCalc=True)
+        self.bicycle.add_rider(rider)
         self.bicycleRiderParameters =\
             bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
