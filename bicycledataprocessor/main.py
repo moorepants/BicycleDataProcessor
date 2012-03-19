@@ -649,14 +649,14 @@ class Run():
                 else:
                     forceRecalc = True
 
+        dataset.close()
+
         if forceRecalc == True:
             try:
                 del self.taskSignals
             except AttributeError:
                 pass
             self.process_raw_signals()
-
-        dataset.close()
 
         # store the task signals in the database if they are newly computed
         if (store == True and self.taskFromDatabase == False
@@ -1199,8 +1199,17 @@ class Run():
 
         # force a recalculation (but not the period calcs, they take too long)
         self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData)
+        try:
+            self.bicycle.extras
+        except AttributeError:
+            pass
+        else:
+            self.bicycle.save_parameters()
         # force a recalculation of the human parameters
         self.bicycle.add_rider(rider)
+        if self.bicycle.human is not None:
+            self.bicycle.save_parameters()
+
         self.bicycleRiderParameters =\
             bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 

@@ -17,7 +17,12 @@ else:
 # dependencies
 import numpy as np
 import tables
+import warnings
 from scipy.io import loadmat
+
+# I name my array nodes with a string of numbers which causes PyTables natural
+# naming scheme not to work. This ignores those errors.
+warnings.filterwarnings('ignore', category=tables.NaturalNameWarning)
 
 config = SafeConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), '..', 'defaults.cfg'))
@@ -83,6 +88,7 @@ class DataSet(object):
             [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
             'Left'], ['1', '2', '2', '1'])])
 
+        # TODO : these signal names don't match what I'm actually computing.
         # these are data signals that will be created from the raw data
         self.processedCols = ['FrameAccelerationX',
                               'FrameAccelerationY',
@@ -264,12 +270,7 @@ class DataSet(object):
     def close(self):
         """Closes the currently open HDF5 database."""
 
-        try:
-            self.database.close()
-        except AttributeError:
-            print('The database is not open.')
-        else:
-            del self.database
+        self.database.close()
 
     def create_table(self, *args, **kwargs):
         """Creates an empty table at the root.
@@ -279,13 +280,8 @@ class DataSet(object):
         This is a wrappre to tables.createTable and excepts the same arguments as tables.createTable.
 
         """
-        try:
-            self.database
-        except AttributeError:
-            self.open(mode='a')
-        else:
-            self.close()
-            self.open(mode='a')
+        self.close()
+        self.open(mode='a')
 
         where = args[0]
         name = args[1]
@@ -324,8 +320,6 @@ class DataSet(object):
         self.create_table('/', 'runTable',
             RunTable, 'Run Information', expectedrows=(numRuns + 100))
 
-        self.close()
-
     def create_signal_table(self):
         """Creates an empty signal information table."""
 
@@ -353,10 +347,13 @@ class DataSet(object):
     def create_task_table(self):
         """Creates an empty task table."""
 
+
         taskTable = self._task_table_class()
         self.create_table('/', 'taskTable', taskTable,
             'Processed task signal meta data', expectedrows=1000)
+
         # delete any arrays that may be there too
+        self.close()
         self.open(mode='a')
         try:
             self.database.root.taskData._f_remove(recursive=True)
@@ -586,9 +583,6 @@ class DataSet(object):
 
         """
 
-        import warnings
-        warnings.filterwarnings('ignore', category=tables.NaturalNameWarning)
-
         # open the hdf5 file for appending
         self.open(mode='a')
 
@@ -601,8 +595,7 @@ class DataSet(object):
 
         # get a list of run ids that are already in the database
         runTable = self.database.root.runTable
-        databaseRuns = [run_id_string(x) for x in
-                runTable.col('RunID')]
+        databaseRuns = [run_id_string(x) for x in runTable.col('RunID')]
 
         # load the list of files from the h5 directory
         files = list_files_in_dir(self.pathToRun)
@@ -741,15 +734,8 @@ class DataSet(object):
             The should contain the RunID, Tau, Duration, MeanSpeed, StdSpeed.
 
         """
-        try:
-            self.database
-        except AttributeError:
-            self.close()
-            self.open(mode='a')
-        else:
-            if self.database.mode != 'a':
-                self.close()
-                self.open(mode='a')
+        self.close()
+        self.open(mode='a')
 
         taskTable = self.database.root.taskTable
 
@@ -829,13 +815,7 @@ class DataSet(object):
         corruption = self.load_corruption_data()
 
         # make sure the database is open for appending
-        try:
-            self.database
-        except:
-            pass
-        else:
-            self.close()
-
+        self.close()
         self.open(mode='a')
 
         for row in self.database.root.runTable.iterrows():
