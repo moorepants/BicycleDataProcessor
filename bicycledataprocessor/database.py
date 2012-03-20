@@ -919,7 +919,6 @@ def get_row_num(runid, table):
     if rownum != int(runid):
         rownum = [x.nrow for x in table.iterrows()
                   if x['RunID'] == int(runid)][0]
-        print "The row numbers in the database do not match the run ids!"
     return rownum
 
 def unsize_vector(vector, m):
