@@ -7,12 +7,12 @@ from operator import xor
 from ConfigParser import SafeConfigParser
 
 # I use this for debugging in IPython if available.
-try:
-    from IPython.core.debugger import Tracer
-except ImportError:
-    pass
-else:
-    set_trace = Tracer()
+#try:
+    #from IPython.core.debugger import Tracer
+#except ImportError:
+    #pass
+#else:
+    #set_trace = Tracer()
 
 # dependencies
 import numpy as np

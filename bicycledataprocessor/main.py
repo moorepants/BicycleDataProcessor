@@ -8,12 +8,12 @@ from warnings import warn
 from ConfigParser import SafeConfigParser
 
 # debugging
-try:
-    from IPython.core.debugger import Tracer
-except ImportError:
-    pass
-else:
-    set_trace = Tracer()
+#try:
+    #from IPython.core.debugger import Tracer
+#except ImportError:
+    #pass
+#else:
+    #set_trace = Tracer()
 
 # dependencies
 import numpy as np
@@ -548,11 +548,11 @@ class Run():
             leading zeros, e.g. '00005'.
         dataset : DataSet
             A DataSet object with at least some raw data.
-        pathToParameterData : string, optional
+        pathToParameterData : string, {'<path>', None},  optional
             The path to a data directory for the BicycleParameters package. It
             should contain the bicycles and riders used in the experiments.
         forceRecalc : boolean, optional, default = False
-            If true then it will force a recalculation of all the the processed
+            If true then it will force a recalculation of all the processed
             data.
         filterSigs : float, optional, default = None
             If true all of the processed signals will be low pass filtered with
@@ -985,9 +985,10 @@ class Run():
 
             additionalAx = fig.add_subplot(4, 1, 3)
             additionalAx.plot(time, hdot + cross + components['viscous'] +
-                    components['coulomb'])
+                    components['coulomb'],
+                    label='Total Frictional and Dynamic Torque')
             additionalAx.set_ylabel('Torque [N-m]')
-            additionalAx.legend(('Total Frictional and Dynamic Torque'))
+            additionalAx.legend()
 
             torqueAx = fig.add_subplot(4, 1, 4)
             torqueAx.plot(time, components['steerColumn'],
