@@ -110,11 +110,9 @@ Build the PyTables HDF5 File from raw data
 ------------------------------------------
 
 The second option would be to build the database with the raw data from
-BicycleDAQ_. BicycleDAQ_ stores the raw data as matlab mat files. These need to be
-converted to equivalent HDF5 files to be able to load into the master database
-file. Use the m-file `tools/fill_h5.m` to convert the runs and calibration data
-into HDF5 files. Then use this module to create the database and fill it with
-the data. First create an empty database file in the current directory.::
+BicycleDAQ_. BicycleDAQ_ stores the raw data as Matlab mat files. Then use this
+module to create the database and fill it with the data. First create an empty
+database file in the current directory.::
 
     >>> import bicycledataprocessor as bdp
     >>> dataset = bdp.DataSet()
@@ -123,6 +121,9 @@ the data. First create an empty database file in the current directory.::
 Now, fill the database with the data.::
 
     >>> dataset.fill_all_tables()
+
+The path to all of the raw data must be specififed in the ``defaults.cfg`` or
+as arguments to ``DataSet()``.
 
 Warnings
 ========
