@@ -8,12 +8,12 @@ from warnings import warn
 from ConfigParser import SafeConfigParser
 
 # debugging
-try:
-    from IPython.core.debugger import Tracer
-except ImportError:
-    pass
-else:
-    set_trace = Tracer()
+#try:
+    #from IPython.core.debugger import Tracer
+#except ImportError:
+    #pass
+#else:
+    #set_trace = Tracer()
 
 # dependencies
 import numpy as np
@@ -536,26 +536,29 @@ class Sensor():
 class Run():
     """The fluppin fundamental class for a run."""
 
-    def __init__(self, runid, dataset, pathToParameterData=None, forceRecalc=True,
-            filterFreq=None):
-        """Loads all the data for a run if available otherwise it generates the
-        data from the raw data.
+    def __init__(self, runid, dataset, pathToParameterData=None,
+            forceRecalc=False, filterFreq=None, store=True):
+        """Loads the raw and processed data for a run if available otherwise it
+        generates the processed data from the raw data.
 
         Parameters
         ----------
         runid : int or str
             The run id should be an integer, e.g. 5, or a five digit string with
             leading zeros, e.g. '00005'.
-        dataset : DataSet object
-            A DataSet object with a full data set.
-        pathToParameterData : string, optional
-            The is the path to the data directory for the BicycleParameters
-            package.
-        forceRecalc : boolean, optional
-            If true then it will force a recalculation of all the the non-raw
+        dataset : DataSet
+            A DataSet object with at least some raw data.
+        pathToParameterData : string, {'<path>', None},  optional
+            The path to a data directory for the BicycleParameters package. It
+            should contain the bicycles and riders used in the experiments.
+        forceRecalc : boolean, optional, default = False
+            If true then it will force a recalculation of all the processed
             data.
-        filterSigs : boolean, optional
-            If true the computed signals will be low pass filtered.
+        filterSigs : float, optional, default = None
+            If true all of the processed signals will be low pass filtered with
+            a second order Butterworth filter at the given filter frequency.
+        store : boolean, optional, default = True
+            If true the resulting task signals will be stored in the database.
 
         """
 
@@ -563,10 +566,13 @@ class Run():
             pathToParameterData = config.get('data', 'pathToParameters')
 
         print "Initializing the run object."
-        # get the tables
+
+        self.filterFreq = filterFreq
+
         dataset.open()
         dataTable = dataset.database.root.runTable
         signalTable = dataset.database.root.signalTable
+        taskTable = dataset.database.root.taskTable
 
         runid = run_id_string(runid)
 
@@ -589,9 +595,6 @@ class Run():
             if col not in (rawDataCols + computedCols):
                 self.metadata[col] = get_cell(dataTable, col, rownum)
 
-        # tell the user about the run
-        print self
-
         print "Loading the raw signals from the database."
         for col in rawDataCols:
             # rawDataCols includes all possible raw signals, but every run
@@ -606,35 +609,94 @@ class Run():
 
         self.bumpLength = 1.0 # 1 meter
 
-        if forceRecalc == True:
-            print "Computing signals from raw data."
-            self.calibrate_signals()
-
-            maneuver = self.metadata['Maneuver']
-            con1 = maneuver != 'Steer Dynamics Test'
-            con2 = maneuver != 'System Test'
-            con3 = maneuver != 'Static Calibration'
-            if con1 and con2 and con3:
-                self.compute_time_shift()
-                self.check_time_shift(0.15)
-                # truncate and spline all of the calibrated signals
-                self.truncate_signals()
-
-                # transfer some of the signals to computed
-                self.compute_signals()
-
-                self.task_signals()
-
-            if filterFreq is not None:
-                self.filter_top_signals(filterFreq)
+        # Try to load the task signals if they've already been computed. If
+        # they aren't in the database, the filter frequencies don't match or
+        # forceRecalc is true the then compute them. This may save some time
+        # when repeatedly loading runs for analysis.
+        self.taskFromDatabase = False
+        try:
+            runGroup = dataset.database.root.taskData._f_getChild(runid)
+        except NoSuchNodeError:
+            forceRecalc = True
         else:
-            raise NotImplementedError
-            # else just get the values stored in the database
-            print "Loading computed signals from database."
-            for col in computedCols:
-                self.computedSignals[col] = RawSignal(runid, col, datafile)
+            # The filter frequency stored in the task table is either a nan
+            # value or a valid float. If the stored filter frequency is not the
+            # same as the the one passed to Run, then a recalculation should be
+            # forced.
+            taskRowNum = get_row_num(runid, taskTable)
+            storedFreq = taskTable.cols.FilterFrequency[taskRowNum]
+            self.taskSignals = {}
+            if filterFreq is None:
+                newFilterFreq = np.nan
+            else:
+                newFilterFreq = filterFreq
+
+            if np.isnan(newFilterFreq) and np.isnan(storedFreq):
+                for node in runGroup._f_walkNodes():
+                    meta = {k : node._f_getAttr(k) for k in ['units', 'name',
+                        'runid', 'sampleRate', 'source']}
+                    self.taskSignals[node.name] = Signal(node[:], meta)
+                self.taskFromDatabase = True
+            elif np.isnan(newFilterFreq) or np.isnan(storedFreq):
+                forceRecalc = True
+            else:
+                if abs(storedFreq - filterFreq) < 1e-10:
+                    for node in runGroup._f_walkNodes():
+                        meta = {k : node._f_getAttr(k) for k in ['units', 'name',
+                        'runid', 'sampleRate', 'source']}
+                        self.taskSignals[node.name] = Signal(node[:], meta)
+                    self.taskFromDatabase = True
+                else:
+                    forceRecalc = True
 
         dataset.close()
+
+        if forceRecalc == True:
+            try:
+                del self.taskSignals
+            except AttributeError:
+                pass
+            self.process_raw_signals()
+
+        # store the task signals in the database if they are newly computed
+        if (store == True and self.taskFromDatabase == False
+                and self.topSig == 'task'):
+            taskMeta = {
+                        'Duration' :
+                        self.taskSignals['ForwardSpeed'].time()[-1],
+                        'FilterFrequency' : self.filterFreq,
+                        'MeanSpeed' : self.taskSignals['ForwardSpeed'].mean(),
+                        'RunID' : self.metadata['RunID'],
+                        'StdSpeed' : self.taskSignals['ForwardSpeed'].std(),
+                        'Tau' : self.tau,
+                        }
+            dataset.add_task_signals(self.taskSignals, taskMeta)
+
+        # tell the user about the run
+        print self
+
+    def process_raw_signals(self):
+        """Processes the raw signals as far as possible and filters the
+        result if a cutoff frequency was specified."""
+
+        print "Computing signals from raw data."
+        self.calibrate_signals()
+
+        # the following maneuvers should never be calculated beyond the
+        # calibrated signals
+        maneuver = self.metadata['Maneuver']
+        con1 = maneuver != 'Steer Dynamics Test'
+        con2 = maneuver != 'System Test'
+        con3 = maneuver != 'Static Calibration'
+        if con1 and con2 and con3:
+            self.compute_time_shift()
+            self.check_time_shift(0.15)
+            self.truncate_signals()
+            self.compute_signals()
+            self.task_signals()
+
+        if self.filterFreq is not None:
+            self.filter_top_signals(self.filterFreq)
 
     def filter_top_signals(self, filterFreq):
         """Filters the top most signals with a low pass filter."""
@@ -923,9 +985,10 @@ class Run():
 
             additionalAx = fig.add_subplot(4, 1, 3)
             additionalAx.plot(time, hdot + cross + components['viscous'] +
-                    components['coulomb'])
+                    components['coulomb'],
+                    label='Total Frictional and Dynamic Torque')
             additionalAx.set_ylabel('Torque [N-m]')
-            additionalAx.legend(('Total Frictional and Dynamic Torque'))
+            additionalAx.legend()
 
             torqueAx = fig.add_subplot(4, 1, 4)
             torqueAx.plot(time, components['steerColumn'],
@@ -1136,10 +1199,18 @@ class Run():
                     'for {}'.format(rider))
 
         # force a recalculation (but not the period calcs, they take too long)
-        self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData,
-                forceRawCalc=True)
+        self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData)
+        try:
+            self.bicycle.extras
+        except AttributeError:
+            pass
+        else:
+            self.bicycle.save_parameters()
         # force a recalculation of the human parameters
-        self.bicycle.add_rider(rider, reCalc=True)
+        self.bicycle.add_rider(rider)
+        if self.bicycle.human is not None:
+            self.bicycle.save_parameters()
+
         self.bicycleRiderParameters =\
             bp.io.remove_uncertainties(self.bicycle.parameters['Benchmark'])
 
