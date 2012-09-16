@@ -36,12 +36,20 @@ Load prebuilt database file
 ---------------------------
 
 The simplest way to get started with the data is to download the latest
-database file from:
+database file from::
 
-http://mae.ucdavis.edu/~biosport/InstrumentedBicycleData/InstrumentedBicycleData.h5.bz2
+   $ wget http://mae.ucdavis.edu/~biosport/InstrumentedBicycleData/InstrumentedBicycleData.h5.bz2
 
 Uncompress the file into your `BicycleDataProcessor` directory, the file is
-ready for use. Open a python command prompt and import the module::
+ready for use.::
+
+   $ bzip2 -d InstrumentedBicycleData.h5.bz2
+
+Now edit ``defaults.cfg`` and change ``pathToDatabase`` and
+``pathToParameters`` to point to the downloaded and unzipped database file and
+the ``BicycleParameters`` data folder, respectively.
+
+Open a python command prompt and import the module::
 
     >>> import bicycledataprocessor as bdp
 
@@ -51,12 +59,10 @@ First load the database as read-only::
 
 Now load a run::
 
-    >>> run = bdp.Run('00105', dataset, <pathToParameterData>, filterSigs=True)
+    >>> run = bdp.Run('00105', dataset, filterSigs=True)
 
-The `<pathToParameterData>` needs to point to the data directory associated
-with the BicycleParameters module and should contain Jason, Luke, Charlie and
-the Rigid and Rigidcl bicycles. The `filterSigs` will apply a filter to the
-signals to remove some of the noise, it is optional.
+The `filterSigs` will apply a filter to the signals to remove some of the
+noise, it is optional.
 
 Check to make sure the data was properly time synchronized::
 
@@ -111,8 +117,13 @@ Build the PyTables HDF5 File from raw data
 
 The second option would be to build the database with the raw data from
 BicycleDAQ_. BicycleDAQ_ stores the raw data as Matlab mat files. Then use this
-module to create the database and fill it with the data. First create an empty
-database file in the current directory.::
+module to create the database and fill it with the data.
+
+Make sure your ``defaults.cfg`` paths point to the correct directories for the
+run mat files (``pathToRunMat``), calibration mat files (``pathToCalibMat``),
+the corrupt data file (``data-corruption.csv``).
+
+First create an empty database file in the current directory.::
 
     >>> import bicycledataprocessor as bdp
     >>> dataset = bdp.DataSet()

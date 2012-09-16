@@ -565,14 +565,15 @@ class DataSet(object):
         self.close()
 
     def fill_run_table(self, runs=None, overwrite=False):
-        """Adds all the data from the hdf5 files in the h5 directory to the run
-        information table and stores the time series data in arrays.
+        """Adds all the data from the mat files in pathToRun directory or from
+        the hdf5 files in the h5 directory to the run information table and
+        stores the time series data in arrays.
 
         Parameters
         ----------
         runs : string or list of strings, optional
-            If `run` is `all`, the entire directory of individual run files
-            will be added to the database. If `run` is a list of run ids, e.g.
+            If `runs` is `all`, the entire directory of individual run files
+            will be added to the database. If `runs` is a list of run ids, e.g.
             ['00345', '00346'], then those files will be added to the database.
             If run is the default `None`, then only the new files in the
             directory will be added.
