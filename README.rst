@@ -4,6 +4,7 @@ DataProcessor
 
 Description
 ===========
+
 This program is setup to process the raw data signals collected from the
 instrumented bicycle's data acquisition system (i.e. the output of BicycleDAQ_)
 
@@ -11,8 +12,9 @@ instrumented bicycle's data acquisition system (i.e. the output of BicycleDAQ_)
 
 Dependencies
 ============
+
 These are the versions that I tested the code with, but the code will most
-likely work with other versions.
+likely work with newer versions.
 
 - `Python 2.7.1`__
 .. __: http://www.python.org
@@ -24,9 +26,11 @@ likely work with other versions.
 .. __: http://matplotlib.sourceforge.net
 - `PyTables 2.1.2`__
 .. __: http://www.pytables.org
-- `BicycleParameters 0.1.3`__
+- `BicycleParameters`__ (either checkout the ``dissertation`` tag or use the
+  latest master)
 .. __: http://pypi.python.org/pypi/BicycleParameters
-- `DynamicistToolKit 0.1.0dev`__
+- `DynamicistToolKit`__ (either checkout the ``dissertation`` tag or use the
+  latest master)
 .. __: https://github.com/moorepants/DynamicistToolKit
 
 Usage
@@ -40,8 +44,7 @@ database file from::
 
    $ wget http://mae.ucdavis.edu/~biosport/InstrumentedBicycleData/InstrumentedBicycleData.h5.bz2
 
-Uncompress the file into your `BicycleDataProcessor` directory, the file is
-ready for use.::
+Uncompress the file and it is ready for use.::
 
    $ bzip2 -d InstrumentedBicycleData.h5.bz2
 
@@ -59,7 +62,7 @@ First load the database as read-only::
 
 Now load a run::
 
-    >>> run = bdp.Run('00105', dataset, filterSigs=True)
+    >>> run = bdp.Run('00105', dataset)
 
 The `filterSigs` will apply a filter to the signals to remove some of the
 noise, it is optional.
@@ -141,7 +144,9 @@ Warnings
 
 - The roll angle is not guaranteed to be calibrated in some of the early
   pavillion runs. Check this.
-- The first set of pavilion runs with Luke and Charlie are mostly corrupt, beware.
+- The first set of pavilion runs with Luke and Charlie are mostly corrupt,
+  beware. The corruption column in the runTable specifies which runs are
+  corrupt.
 - The yaw angle and lateral deviation values depend on integrating the yaw
   rate. This seems to work for runs that have signals centered around zero, but
   are definitely wrong for others. (There are plans to fix this for all runs.)
