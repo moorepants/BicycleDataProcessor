@@ -1,6 +1,11 @@
-import dataprocessor.dataprocessor as dp
-import numpy.testing as npt
+#!/usr/bin/env python
+
 import numpy as np
+import numpy.testing as npt
+from scipy.optimize import fmin
+
+from bicycledataprocessor import main, signalprocessing, database
+
 
 def test_Signal():
     metadata = {'name': 'RollAngle',
@@ -9,7 +14,7 @@ def test_Signal():
                 'source': 'NI',
                 'units': 'degree'}
     signalArray = np.ones(5)
-    rollAngle = dp.Signal(signalArray, metadata)
+    rollAngle = main.Signal(signalArray, metadata)
     assert rollAngle.name == metadata['name']
     assert rollAngle.runid == metadata['runid']
     assert rollAngle.sampleRate == metadata['sampleRate']
@@ -17,18 +22,21 @@ def test_Signal():
     assert rollAngle.units == metadata['units']
     npt.assert_array_equal(signalArray, rollAngle)
 
+
 def test_unsize_vector():
     n = 3
     a = np.ones(n)
     b = np.append(a, np.array([np.nan, np.nan]))
-    c = dp.unsize_vector(a, n)
+    c = database.unsize_vector(a, n)
     assert (a == c).all()
+
 
 def test_time_vector():
     numSamples = 100
     sampleRate = 50
-    time = dp.time_vector(numSamples, sampleRate)
+    time = signalprocessing.time_vector(numSamples, sampleRate)
     assert (time == np.linspace(0., 2. - 1. / 50., num=100)).all()
+
 
 def test_split_around_nan():
     # build an array of length 25 with some nan values
@@ -38,7 +46,7 @@ def test_split_around_nan():
         if i not in [0, 5, 20, 24]:
             a[i] = b[i]
     # run the function and test the results
-    indices, arrays = dp.split_around_nan(a)
+    indices, arrays = signalprocessing.split_around_nan(a)
     assert len(indices) == 7
     assert indices[0] == (0, 1)
     assert indices[1] == (1, 5)
@@ -54,7 +62,7 @@ def test_split_around_nan():
         if i not in [5, 20]:
             a[i] = b[i]
     # run the function and test the results
-    indices, arrays = dp.split_around_nan(a)
+    indices, arrays = signalprocessing.split_around_nan(a)
     assert len(indices) == 5
     assert indices[0] == (0, 5)
     assert indices[1] == (5, 6)
@@ -63,7 +71,7 @@ def test_split_around_nan():
     assert indices[4] == (21, 25)
     a = np.array([np.nan, 1, 2, 3, np.nan, np.nan, 6, 7, np.nan])
     # run the function and test the results
-    indices, arrays = dp.split_around_nan(a)
+    indices, arrays = signalprocessing.split_around_nan(a)
     assert len(indices) == 6
     assert indices[0] == (0, 1)
     assert indices[1] == (1, 4)
@@ -72,6 +80,7 @@ def test_split_around_nan():
     assert indices[4] == (6, 8)
     assert indices[5] == (8, 9)
 
+
 def test_vnav_checksum():
     s = ('$VNCMV,' +
          '+1.045402E+00,+6.071629E-01,-4.171332E-01,' +
@@ -79,13 +88,14 @@ def test_vnav_checksum():
          '+9.549000E-03,-2.366146E-02,-2.832810E-02,' +
          '+3.179132E+02'
          '*4F\r\n')
-    assert dp.vnav_checksum(s) == '4F'
+    assert database.vnav_checksum(s) == '4F'
 
     s = '$VNRRG,04,1*6A\r\n'
-    assert dp.vnav_checksum(s) == '6A'
+    assert database.vnav_checksum(s) == '6A'
 
     s = '$VNRRG,08,-027.33,-005.33,+002.63*65\r\n'
-    assert dp.vnav_checksum(s) == '65'
+    assert database.vnav_checksum(s) == '65'
+
 
 def test_parse_vnav_string():
     strings = []
@@ -158,15 +168,16 @@ def test_parse_vnav_string():
                      '+3.179069E+02', '4F'], False, None))
 
     for s, a in zip(strings, answers):
-        assert dp.parse_vnav_string(s) == a
+        assert database.parse_vnav_string(s) == a
+
 
 def test_sync_error():
     tau = 0.234
-    time = dp.np.linspace(0, 10, num=100)
-    sig1 = dp.np.sin(time - tau)
-    sig2 = dp.np.sin(time)
+    time = np.linspace(0, 10, num=100)
+    sig1 = np.sin(time - tau)
+    sig2 = np.sin(time)
     # I feel like I should be able to set the value lower than zero, but I
     # don't seem to be getting perfect fits. I'm not sure why.
-    assert dp.sync_error(tau, sig1, sig2, time) < 0.01
-    minTau  = dp.fmin(dp.sync_error, tau, args=(sig1, sig2, time))[0]
+    assert signalprocessing.sync_error(tau, sig1, sig2, time) < 0.01
+    minTau = fmin(dp.sync_error, tau, args=(sig1, sig2, time))[0]
     assert minTau < tau + 1E-6

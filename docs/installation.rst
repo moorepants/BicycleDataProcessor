@@ -4,40 +4,37 @@ Installation
 
 Dependencies
 ============
-These are the versions that I tested the code with, but the code will most
-likely work with older versions.
 
-Required
---------
-- `Python 2.7.1 <http://www.python.org/>`_
-- `Scipy 0.9.0 <http://www.scipy.org/>`_
-- `Numpy 1.5.1 <http://numpy.scipy.org/>`_
-- `PyTables <http://www.pytables.org>`_
-- `Matplotlib 0.99.3 <http://matplotlib.sourceforge.net/>`_
-
-Optional
---------
-These are required to bulid the documentation:
-
-- `Sphinx <http://sphinx.pocoo.org/>`_
-- `Numpydoc <http://pypi.python.org/pypi/numpydoc>`_
+- `Python 2.7`__
+.. __: http://www.python.org
+- `Scipy >= 0.9.0`__
+.. __: http://www.scipy.org
+- `Numpy >= 1.6.1`__
+.. __: http://numpy.scipy.org
+- `Matplotlib >= 1.1.1`__
+.. __: http://matplotlib.sourceforge.net
+- `PyTables >= 2.1.2 and < 3.0.0`__
+.. __: http://www.pytables.org
+- `BicycleParameters >= 0.2.0`__
+.. __: http://pypi.python.org/pypi/BicycleParameters
+- `DynamicistToolKit >= 0.3.5`__
+.. __: https://github.com/moorepants/DynamicistToolKit
 
 Installation
 ============
 
-There are currently two options for getting the source code:
+For ease of setup we recommend setting up a conda_ environment::
 
-1. Clone the source code with Git: ``git clone
-   git://github.com/moorepants/BicycleParameters.git``
-2. `Download the source from Github`__.
+   $ conda create -n bdp numpy scipy matplotlib sympy pandas pyyaml "pytables<3.0"
+   $ source activate bdp
 
-.. __: https://github.com/moorepants/BicycleParameters
+The remaining dependencies need to be installed with pip::
 
-Once you have the source code navigate to the directory and run::
+   (bdp)$ pip install uncertainties "dynamicisttoolkit>=0.3.5"
+   (bdp)$ pip install "yeadon>=1.1.1" "BicycleParameters>=0.2.0"
 
-  >>> python setup.py install
+And finally, this package::
 
-This will install the software into your system and you should be able to
-import it with::
+   (bdp)$ pip install BicycleDataProcessor
 
-  >>> import DataProcessor
+.. _conda: http://conda.pydata.org/

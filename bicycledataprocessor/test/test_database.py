@@ -1,8 +1,13 @@
+#!/usr/bin/env python
+
 import os
-from bicycledataprocessor import database
+
 from numpy.random import randint
 from numpy import ones
 import numpy.testing as npt
+
+from bicycledataprocessor import database
+
 
 def test_create_signal_table():
     db = database.DataSet(fileName='sigtest.h5')
@@ -18,11 +23,13 @@ def test_create_signal_table():
     db.close()
     os.remove('sigtest.h5')
 
+
 def test_run_id_string():
     ids = [105, '000105', '00105', '0105', '105']
 
     for run in ids:
         assert database.run_id_string(run) == '00105'
+
 
 def test_get_calib_data():
     """This just tests whether the .mat files return the same values as the .h5
@@ -43,6 +50,7 @@ def test_get_calib_data():
             assert v == matDat[k]
         else:
             npt.assert_allclose(v, matDat[k])
+
 
 def test_get_run_data():
     """This just tests whether the .mat files return the same values as the .h5

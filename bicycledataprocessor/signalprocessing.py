@@ -507,7 +507,7 @@ def truncate_data(signal, tau):
     Returns the truncated vectors with respect to the timeshift tau.
 
     Parameters
-    ---------
+    ----------
     signal : Signal(ndarray), shape(n, )
         A time signal from the NIData or the VNavData.
     tau : float

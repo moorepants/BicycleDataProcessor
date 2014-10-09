@@ -25,7 +25,8 @@ from bdpexceptions import TimeShiftError
 
 class Signal(np.ndarray):
     """
-    A subclass of ndarray for collecting the data for a single signal in a run.
+    A subclass of ndarray for collecting the data for a single signal in a
+    run.
 
     Attributes
     ----------
@@ -45,7 +46,7 @@ class Signal(np.ndarray):
         The physcial units of the signal. These should be specified
         as lowercase complete words using only multiplication and
         division symbols (e.g. 'meter/second/second').
-        Signal.conversions will show the avialable options.
+        Signal.conversions will show the available options.
 
     Methods
     -------
@@ -60,7 +61,7 @@ class Signal(np.ndarray):
     truncate(tau)
         Interpolates and truncates the signal the based on the time shift,
         `tau`, and the signal source.
-    as_dictionary
+    as_dictionary()
         Returns a dictionary of the metadata of the signal.
     convert_units(units)
         Returns a signal with different units. `conversions` specifies the
@@ -89,21 +90,21 @@ class Signal(np.ndarray):
             history.
         metadata : dictionary
             This dictionary contains the metadata for the signal.
-                name : str
-                    The name of the signal. Should be CamelCase.
-                runid : str
-                    A five digit identification number associated with the
-                    trial this experiment was collected at (e.g. '00104').
-                sampleRate : float
-                    The sample rate in hertz of the signal.
-                source : str
-                    The source of the data. This should be 'NI' for the
-                    National Instruments USB-6218 and 'VN' for the VN-100 IMU.
-                units : str
-                    The physcial units of the signal. These should be specified
-                    as lowercase complete words using only multiplication and
-                    division symbols (e.g. 'meter/second/second').
-                    Signal.conversions will show the avialable options.
+            name : str
+                The name of the signal. Should be CamelCase.
+            runid : str
+                A five digit identification number associated with the
+                trial this experiment was collected at (e.g. '00104').
+            sampleRate : float
+                The sample rate in hertz of the signal.
+            source : str
+                The source of the data. This should be 'NI' for the
+                National Instruments USB-6218 and 'VN' for the VN-100 IMU.
+            units : str
+                The physcial units of the signal. These should be specified
+                as lowercase complete words using only multiplication and
+                division symbols (e.g. 'meter/second/second').
+                Signal.conversions will show the available options.
 
         Raises
         ------
@@ -283,8 +284,8 @@ class RawSignal(Signal):
         runid : str
             A five digit
         signalName : str
-            A CamelCase signal name that corresponds to the raw signals output
-            by BicycleDAQ_.
+            A CamelCase signal name that corresponds to the raw signals
+            output by BicycleDAQ_.
         database : pytables object
             The hdf5 database for the instrumented bicycle.
 

@@ -1,18 +1,18 @@
-dataprocessor Package
-=====================
+bicycledataprocessor Package
+============================
 
 :mod:`database` Module
 ----------------------
 
-.. automodule:: dataprocessor.database
+.. automodule:: bicycledataprocessor.database
     :members:
     :undoc-members:
     :show-inheritance:
 
-:mod:`dataprocessor` Module
+:mod:`main` Module
 ---------------------------
 
-.. automodule:: dataprocessor.dataprocessor
+.. automodule:: bicycledataprocessor.main
     :members:
     :undoc-members:
     :show-inheritance:
@@ -20,7 +20,7 @@ dataprocessor Package
 :mod:`signalprocessing` Module
 ------------------------------
 
-.. automodule:: dataprocessor.signalprocessing
+.. automodule:: bicycledataprocessor.signalprocessing
     :members:
     :undoc-members:
     :show-inheritance:
@@ -30,5 +30,4 @@ Subpackages
 
 .. toctree::
 
-    dataprocessor.test
-
+    bicycledataprocessor.test.rst
