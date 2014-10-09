@@ -4,16 +4,6 @@
 import os
 import datetime
 from math import pi
-from warnings import warn
-from ConfigParser import SafeConfigParser
-
-# debugging
-#try:
-    #from IPython.core.debugger import Tracer
-#except ImportError:
-    #pass
-#else:
-    #set_trace = Tracer()
 
 # dependencies
 import numpy as np
@@ -22,18 +12,16 @@ from scipy.integrate import cumtrapz
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 from tables import NoSuchNodeError
-
 import dtk.process as process
 from dtk.bicycle import front_contact, benchmark_to_moore
 import bicycleparameters as bp
 
 # local dependencies
-from database import get_row_num, get_cell, pad_with_zeros, run_id_string
+from database import (get_row_num, get_cell, pad_with_zeros, run_id_string,
+                      default_paths)
 import signalprocessing as sigpro
 from bdpexceptions import TimeShiftError
 
-config = SafeConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), '..', 'defaults.cfg'))
 
 class Signal(np.ndarray):
     """
@@ -563,7 +551,7 @@ class Run():
         """
 
         if pathToParameterData is None:
-            pathToParameterData = config.get('data', 'pathToParameters')
+            pathToParameterData = default_paths['pathToParameters']
 
         print "Initializing the run object."
 
