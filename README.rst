@@ -49,7 +49,7 @@ For ease of setup we recommend setting up a conda_ environment::
    $ conda create -n bdp numpy scipy matplotlib sympy pandas pyyaml "pytables<3.0"
    $ source activate bdp
 
-The remaining depedencies need to be installed with pip::
+The remaining dependencies need to be installed with pip::
 
    (bdp)$ pip install uncertainties "dynamicisttoolkit>=0.3.5"
    (bdp)$ pip install "yeadon>=1.1.1" "BicycleParameters>=0.2.0"
@@ -108,11 +108,11 @@ the VN-100 data. If these do not match, then the synchronization algorithm
 didn't not work and the data may be unusable.
 
 The run has a lot of data associated with it. Firstly, you can print a subset of
-the metadata with::
+the meta data with::
 
     >>> print(run)
 
-The complete metadata is stored in a dictionary::
+The complete meta data is stored in a dictionary::
 
     >>> run.metadata
 
@@ -137,7 +137,7 @@ The data for each task signal is also stored in a dictionary::
 
     >>> run.taskSignals
 
-The taskSignals can be plotted::
+The ``taskSignals`` can be plotted::
 
     >>> run.taskSignals.keys() # see a list of options
     >>> run.plot('SteerAngle', 'RollAngle', 'PullForce')
@@ -191,7 +191,7 @@ Warnings
 ========
 
 - The roll angle is not guaranteed to be calibrated in some of the early
-  pavillion runs. Caution should be used.
+  pavilion runs. Caution should be used.
 - The first set of pavilion runs with Luke and Charlie are mostly corrupt,
   beware. The corruption column in the ``runTable`` specifies which runs are
   corrupt.
