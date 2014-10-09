@@ -4,15 +4,7 @@
 import os
 import re
 from operator import xor
-from ConfigParser import SafeConfigParser
-
-# I use this for debugging in IPython if available.
-#try:
-    #from IPython.core.debugger import Tracer
-#except ImportError:
-    #pass
-#else:
-    #set_trace = Tracer()
+from ConfigParser import SafeConfigParser, NoOptionError
 
 # dependencies
 import numpy as np
@@ -24,8 +16,23 @@ from scipy.io import loadmat
 # naming scheme not to work. This ignores those errors.
 warnings.filterwarnings('ignore', category=tables.NaturalNameWarning)
 
+default_paths = {'pathToDatabase': 'instrumented-bicycle-data.h5',
+                 'pathToCorruption': 'data-corruption.csv',
+                 'pathToRunMat': 'raw-trial-data',
+                 'pathToCalibMat': 'raw-calibration-data',
+                 'pathToRunH5': 'raw-trial-data-h5',
+                 'pathToCalibH5': 'raw-calibration-data-h5',
+                 'pathToParameters': 'bicycle-parameters'}
+
 config = SafeConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), '..', 'defaults.cfg'))
+config_file = config.read('bdp-defaults.cfg')
+if config_file:
+    for k, v in default_paths.items():
+        try:
+            default_paths[k] = config.get('data', k)
+        except NoOptionError:
+            pass
+
 
 class DataSet(object):
 
@@ -56,14 +63,15 @@ class DataSet(object):
 
         """
 
-        acceptedKeywords = ['pathToDatabase', 'pathToRunMat', 'pathToCalibMat',
-            'pathToRunH5', 'pathToCalibH5', 'pathToCorruption']
+        acceptedKeywords = ['pathToDatabase', 'pathToRunMat',
+                            'pathToCalibMat', 'pathToRunH5',
+                            'pathToCalibH5', 'pathToCorruption']
 
         for k in acceptedKeywords:
             if k in kwargs.keys():
                 setattr(self, k, kwargs[k])
             else:
-                setattr(self, k, config.get('data', k))
+                setattr(self, k, default_paths[k])
 
         # This class has the ability to load data from mat files or h5 files.
         # The preference is mat files.
@@ -81,12 +89,13 @@ class DataSet(object):
             self.pathToCalib = self.pathToCalibH5
             self.calibExt = '.h5'
 
-        # these columns may be used in the future but for now there is no reason to
-        # introduce them into the database
-        self.ignoredNICols = (['SeatpostBridge' + str(x) for x in range(1, 7)] +
-            [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
-            [x + 'FootBridge' + y for x, y in zip(2 * ['Right',
-            'Left'], ['1', '2', '2', '1'])])
+        # these columns may be used in the future but for now there is no
+        # reason to introduce them into the database
+        self.ignoredNICols = \
+            (['SeatpostBridge' + str(x) for x in range(1, 7)] +
+             [x + 'Potentiometer' for x in ['Hip', 'Lean', 'Twist']] +
+             [x + 'FootBridge' + y for x, y in zip(2 * ['Right', 'Left'],
+                                                   ['1', '2', '2', '1'])])
 
         # TODO : these signal names don't match what I'm actually computing.
         # these are data signals that will be created from the raw data
@@ -102,7 +111,7 @@ class DataSet(object):
                               'SteerAngle',
                               'SteerRate',
                               'SteerTorque',
-                              'tau', # why tau?
+                              'tau',  # why tau?
                               'YawRate']
 
     def _task_table_class(self):
@@ -184,8 +193,8 @@ class DataSet(object):
                 elif isinstance(val, type(1.)):
                     exec(key + " = tables.Float32Col(pos=i)")
                 elif isinstance(val, type(np.ones(1))):
-                    exec(key + " = tables.Float32Col(shape=(" + str(len(val)) +
-                            ", ), pos=i)")
+                    exec(key + " = tables.Float32Col(shape=(" +
+                         str(len(val)) + ", ), pos=i)")
                 # a marker that declares the data corrupt or unusable
                 corrupt = tables.BoolCol()
                 # a market that declares the data quiestionable
@@ -237,8 +246,9 @@ class DataSet(object):
         """
 
         if os.path.exists(self.pathToDatabase):
-            response = raw_input(('{0} already exists.\n' +
-                'Do you want to overwrite it? (y or n)\n').format(self.pathToDatabase))
+            msg = ('{0} already exists.\n' +
+                   'Do you want to overwrite it? (y or n)\n')
+            response = raw_input(msg.format(self.pathToDatabase))
             if response == 'y':
                 print("{0} will be overwritten".format(self.pathToDatabase))
             else:
@@ -277,7 +287,8 @@ class DataSet(object):
 
         Notes
         -----
-        This is a wrappre to tables.createTable and excepts the same arguments as tables.createTable.
+        This is a wrappre to tables.createTable and excepts the same
+        arguments as tables.createTable.
 
         """
         self.close()
@@ -290,7 +301,7 @@ class DataSet(object):
             table = self.database.createTable(*args, **kwargs)
         except tables.NodeError:
             response = raw_input('{} already exists.\n'.format(name) +
-                'Do you want to overwrite it? (y or n)\n')
+                                 'Do you want to overwrite it? (y or n)\n')
             if response == 'y':
                 print("{} will be overwritten.".format(name))
                 self.database.removeNode(where, name)
@@ -317,8 +328,8 @@ class DataSet(object):
         RunTable = self._run_table_class(unfilteredRun)
 
         # add the data table to the root group
-        self.create_table('/', 'runTable',
-            RunTable, 'Run Information', expectedrows=(numRuns + 100))
+        self.create_table('/', 'runTable', RunTable, 'Run Information',
+                          expectedrows=(numRuns + 100))
 
     def create_signal_table(self):
         """Creates an empty signal information table."""
@@ -326,8 +337,8 @@ class DataSet(object):
         # generate the signal table description class
         SignalTable = self._signal_table_class()
 
-        self.create_table('/', 'signalTable',
-                SignalTable, 'Signal Information', expectedrows=50)
+        self.create_table('/', 'signalTable', SignalTable,
+                          'Signal Information', expectedrows=50)
 
     def create_calibration_table(self):
         """Creates an empty calibration table."""
@@ -340,17 +351,17 @@ class DataSet(object):
         calibrationTable = self._calibration_table_class()
 
         # add the calibration table to the root group
-        self.create_table('/', 'calibrationTable',
-            calibrationTable, 'Calibration Information',
-            expectedrows=(numCalibs + 10))
+        self.create_table('/', 'calibrationTable', calibrationTable,
+                          'Calibration Information',
+                          expectedrows=(numCalibs + 10))
 
     def create_task_table(self):
         """Creates an empty task table."""
 
-
         taskTable = self._task_table_class()
         self.create_table('/', 'taskTable', taskTable,
-            'Processed task signal meta data', expectedrows=1000)
+                          'Processed task signal meta data',
+                          expectedrows=1000)
 
         # delete any arrays that may be there too
         self.close()
@@ -369,7 +380,7 @@ class DataSet(object):
         riders : list
         All or a subset of ['Charlie', 'Jason', 'Luke'].
         maneuvers : list
-        All or a subset of ['Balance', 'Balance With Disturbance', 
+        All or a subset of ['Balance', 'Balance With Disturbance',
                 'Track Straight Line', 'Track Straight Line With Disturbance'].
         environments : list
         All or a subset of ['Horse Treadmill', 'Pavillion Floor'].
@@ -399,13 +410,6 @@ class DataSet(object):
         self.close()
 
         return runs
-
-    def sync_data(self, directory='exports/'):
-        """Synchronizes data to the biosport website."""
-        user = 'biosport'
-        host = 'mae.ucdavis.edu'
-        remoteDir = '/home/grads/biosport/public_html/InstrumentedBicycleData/ProcessedData/'
-        os.system("rsync -avz " + directory + ' -e ssh ' + user + '@' + host + ':' + remoteDir)
 
     def create_html_tables(self, directory='docs/tables'):
         """Creates a table of all the basic info for the runs."""
@@ -604,30 +608,30 @@ class DataSet(object):
         self.close()
 
     def fill_run_table(self, runs=None, overwrite=False):
-        """Adds all the data from the mat files in pathToRun directory or from
-        the hdf5 files in the h5 directory to the run information table and
-        stores the time series data in arrays.
+        """Adds all the data from the mat files in pathToRun directory or
+        from the hdf5 files in the h5 directory to the run information table
+        and stores the time series data in arrays.
 
         Parameters
         ----------
         runs : string or list of strings, optional
             If `runs` is `all`, the entire directory of individual run files
-            will be added to the database. If `runs` is a list of run ids, e.g.
-            ['00345', '00346'], then those files will be added to the database.
-            If run is the default `None`, then only the new files in the
-            directory will be added.
+            will be added to the database. If `runs` is a list of run ids,
+            e.g.  ['00345', '00346'], then those files will be added to the
+            database.  If run is the default `None`, then only the new files
+            in the directory will be added.
         overwrite : boolean, optional
             If `True` any runs that are already in the database will be
-            overwritten. Otherwise, if the runs already exist in the database,
-            the user will be prompted to overwrite the data.
+            overwritten. Otherwise, if the runs already exist in the
+            database, the user will be prompted to overwrite the data.
 
         """
 
         # open the hdf5 file for appending
         self.open(mode='a')
 
-        # create a group to store the time series data, if the group is already
-        # there, the leave it be
+        # create a group to store the time series data, if the group is
+        # already there, the leave it be
         try:
             self.database.createGroup('/', 'rawData')
         except tables.NodeError:
@@ -663,14 +667,14 @@ class DataSet(object):
         # load the corruption data
         corruption = self.load_corruption_data()
 
-        # now find the runs that need to be modified and the runs that need to
-        # be added
+        # now find the runs that need to be modified and the runs that need
+        # to be added
         runsToUpdate = sorted(list(set(runs) & set(databaseRuns)))
         runsToAppend = sorted(list(set(runs) - set(runsToUpdate)))
 
         def fill_row(row, runData):
-            """Fills out all the columns in a row given the runData dictionary
-            and the corruption dictionary."""
+            """Fills out all the columns in a row given the runData
+            dictionary and the corruption dictionary."""
 
             runNum = runData['par']['RunID']
 
@@ -708,9 +712,11 @@ class DataSet(object):
                 yesOrNo = raw_input(q + ' (yes or no)\n')
 
             if yesOrNo == 'yes':
-                for row in runTable.where('RunID == {}'.format(str(int(runID)))):
-                    runData = get_run_data(os.path.join(self.pathToRun, runID +
-                        self.runExt))
+                msg = 'RunID == {}'
+                for row in runTable.where(msg.format(str(int(runID)))):
+                    runData = get_run_data(os.path.join(self.pathToRun,
+                                                        runID +
+                                                        self.runExt))
                     fill_row(row, runData)
                     row.update()
                 # overwrite the arrays
@@ -735,7 +741,7 @@ class DataSet(object):
 
             try:
                 runData = get_run_data(os.path.join(self.pathToRun, runID +
-                    self.runExt))
+                                                    self.runExt))
             except ValueError:
                 # I'm getting a scipy.io.loadmat issue "total size of new array
                 # must be unchanged"
@@ -745,19 +751,20 @@ class DataSet(object):
                 row.append()
 
                 # store the time series data in arrays
-                runGroup = self.database.createGroup(self.database.root.rawData,
-                        runID)
+                runGroup = \
+                    self.database.createGroup(self.database.root.rawData,
+                                              runID)
                 for i, col in enumerate(runData['NICols']):
                     if col not in self.ignoredNICols:
                         try:
                             self.database.createArray(runGroup, col,
-                                runData['NIData'][i])
+                                                      runData['NIData'][i])
                         except IndexError:
                             print("{} not measured in this run.".format(col))
 
                 for i, col in enumerate(runData['VNavCols']):
                     self.database.createArray(runGroup, col,
-                            runData['VNavData'][i])
+                                              runData['VNavData'][i])
 
         runTable.flush()
 
@@ -787,7 +794,8 @@ class DataSet(object):
         # if the run isn't in the table, then append it, if it is then overwite
         # it
         if meta['RunID'] in taskTable.cols.RunID:
-            for row in taskTable.where('RunID == {}'.format(str(int(meta['RunID'])))):
+            msg = 'RunID == {}'
+            for row in taskTable.where(msg.format(str(int(meta['RunID'])))):
                 for k, v in meta.items():
                     row[k] = v
                 row.update()
@@ -803,8 +811,9 @@ class DataSet(object):
             taskTable.row.append()
 
             # store all of the task signals as arrays
-            taskGroup = self.database.createGroup(self.database.root.taskData,
-                    run_id_string(meta['RunID']))
+            taskGroup = \
+                self.database.createGroup(self.database.root.taskData,
+                                          run_id_string(meta['RunID']))
             for name, sig in taskSignals.items():
                 arr = self.database.createArray(taskGroup, name, sig)
                 for attr in ['units', 'name', 'runid', 'sampleRate', 'source']:
@@ -835,11 +844,13 @@ class DataSet(object):
                     corruption['corrupt'].append(values[1] == 'TRUE')
                     corruption['warning'].append(values[2] == 'TRUE')
                     corruption['knee'].append([int(x) for x in
-                        values[3].split(';') if x])
+                                               values[3].split(';') if x])
                     corruption['handlebar'].append([int(x) for x in
-                        values[4].split(';') if x])
+                                                    values[4].split(';') if
+                                                    x])
                     corruption['trailer'].append([int(x) for x in
-                        values[5].split(';') if x])
+                                                  values[5].split(';') if
+                                                  x])
                     if corruption['reason'] != 'na':
                         corruption['reason'].append(values[6].strip())
                     else:
@@ -882,15 +893,15 @@ class DataSet(object):
 
                 row.update()
                 print('Corruption data for ' + row['RunID'] +
-                        ' set to default.')
+                      ' set to default.')
 
         self.close()
 
 
 def get_cell(datatable, colname, rownum):
     '''
-    Returns the contents of a cell in a pytable. Apply unsize_vector correctly
-    for padded vectors.
+    Returns the contents of a cell in a pytable. Apply unsize_vector
+    correctly for padded vectors.
 
     Parameters
     ----------
@@ -915,6 +926,7 @@ def get_cell(datatable, colname, rownum):
 
     return cell
 
+
 def run_id_string(runID):
     """Returns the run id in the five digit string format.
 
@@ -931,6 +943,7 @@ def run_id_string(runID):
     """
 
     return pad_with_zeros(str(runID), 5)
+
 
 def get_row_num(runid, table):
     '''
@@ -949,8 +962,8 @@ def get_row_num(runid, table):
         The row number for runid.
 
     '''
-    # if the row number happens to correspond to the RunID, then try the quick
-    # calculation, otherwise search for it
+    # if the row number happens to correspond to the RunID, then try the
+    # quick calculation, otherwise search for it
     try:
         rownum = table[int(runid)]['RunID']
     except IndexError:
@@ -961,13 +974,15 @@ def get_row_num(runid, table):
                   if x['RunID'] == int(runid)][0]
     return rownum
 
+
 def unsize_vector(vector, m):
     '''Returns a vector with the nan padding removed.
 
     Parameters
     ----------
     vector : numpy array, shape(n, )
-        A vector that may or may not have nan padding and the end of the data.
+        A vector that may or may not have nan padding and the end of the
+        data.
     m : int
         Number of valid values in the vector.
 
@@ -990,16 +1005,17 @@ def unsize_vector(vector, m):
         raise StandardError("Something's wrong with the unsizing")
     return oldvec
 
+
 def size_array(arr, desiredShape):
-    '''Returns a one or two dimensional array that has either been padded with
-    nans or reduced in shape.
+    '''Returns a one or two dimensional array that has either been padded
+    with nans or reduced in shape.
 
     Parameters
     ----------
     arr : ndarray, shape(n,) or shape(n,m)
     desiredShape : integer or tuple
-        If arr is one dimensinal, then desired shape can be a positive integer,
-        else it needs to be a tuple of two positive integers.
+        If arr is one dimensinal, then desired shape can be a positive
+        integer, else it needs to be a tuple of two positive integers.
 
     '''
 
@@ -1043,6 +1059,7 @@ def size_array(arr, desiredShape):
 
     return newArr
 
+
 def size_vector(vector, m):
     '''Returns a vector with nan's padded on to the end or a slice of the
     vector if length is less than the length of the vector.
@@ -1072,6 +1089,7 @@ def size_vector(vector, m):
         raise StandardError("Vector sizing didn't work")
     return newvec
 
+
 def replace_corrupt_strings_with_nan(vnOutput, vnCols):
     '''Returns a numpy matrix with the VN-100 output that has the corrupt
     values replaced by nan values.
@@ -1099,9 +1117,9 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
     for i, vnStr in enumerate(vnOutput):
         # parse the string
         vnList, chkPass, vnrrg = parse_vnav_string(vnStr)
-        # if the checksum passed, then append the data unless vnList is not the
-        # correct length, (this is because run139 sample 4681 seems to calculate the correct
-        # checksum for an incorrect value)
+        # if the checksum passed, then append the data unless vnList is not
+        # the correct length, (this is because run139 sample 4681 seems to
+        # calculate the correct checksum for an incorrect value)
         if chkPass and len(vnList[1:-1]) == len(vnCols):
             vnData.append([float(x) for x in vnList[1:-1]])
         # if not append some nan values
@@ -1119,6 +1137,7 @@ def replace_corrupt_strings_with_nan(vnOutput, vnCols):
     vnData = vnData[:len(vnOutput)]
 
     return np.transpose(np.array(vnData))
+
 
 def parse_vnav_string(vnStr):
     '''Returns a list of the information in a VN-100 text string and whether
@@ -1143,7 +1162,6 @@ def parse_vnav_string(vnStr):
     '''
     # calculate the checksum of the raw string
     calcChkSum = vnav_checksum(vnStr)
-    #print('Checksum for the raw string is %s' % calcChkSum)
 
     # get rid of the $ and the newline characters
     vnMeat = re.sub('''(?x) # verbose
@@ -1162,17 +1180,15 @@ def parse_vnav_string(vnStr):
     else:
         vnrrg = False
 
-    #print("Provided checksum is %s" % vnList[-1])
     # see if the checksum passes
     chkPass = calcChkSum == vnList[-1]
     if not chkPass:
-        #print "Checksum failed"
-        #print vnStr
         vnrrg = None
 
-    # return the list, whether or not the checksum failed and whether or not it
-    # is a VNRRG
+    # return the list, whether or not the checksum failed and whether or not
+    # it is a VNRRG
     return vnList, chkPass, vnrrg
+
 
 def vnav_checksum(vnStr):
     '''
@@ -1209,6 +1225,7 @@ def vnav_checksum(vnStr):
     # the letter's need to be capitalized to match too
     return hexVal.upper()
 
+
 def get_two_runs(pathToRun):
     '''Gets the data from both a filtered and unfiltered run.'''
 
@@ -1218,15 +1235,16 @@ def get_two_runs(pathToRun):
     # get an example filtered and unfiltered run (wrt to the VN-100 data)
     filteredRun = get_run_data(os.path.join(pathToRun, files[0]))
     if filteredRun['par']['ADOT'] is not 14:
-        raise ValueError('Run %d is not a filtered run, choose again' %
-              filteredRun['par']['RunID'])
+        msg = 'Run %d is not a filtered run, choose again'
+        raise ValueError(msg.format(filteredRun['par']['RunID']))
 
     unfilteredRun = get_run_data(os.path.join(pathToRun, files[-1]))
     if unfilteredRun['par']['ADOT'] is not 253:
-        raise ValueError('Run %d is not a unfiltered run, choose again' %
-              unfilteredRun['par']['RunID'])
+        msg = 'Run %d is not a unfiltered run, choose again'
+        raise ValueError(msg.format(unfilteredRun['par']['RunID']))
 
     return filteredRun, unfilteredRun
+
 
 def get_run_data(pathToFile):
     '''
@@ -1279,10 +1297,14 @@ def get_run_data(pathToFile):
             parse_par(runData, key, val)
 
         runData['NIData'] = mat['NIData'].T
-        runData['VNavCols'] = [str(x).replace(' ', '') for x in mat['VNavCols']]
-        inputPairs = [(x, int(y)) for x, y in zip(mat['InputPairs'].dtype.names, mat['InputPairs'][()])]
+        runData['VNavCols'] = [str(x).replace(' ', '') for x in
+                               mat['VNavCols']]
+        inputPairs = [(x, int(y)) for x, y in
+                      zip(mat['InputPairs'].dtype.names,
+                          mat['InputPairs'][()])]
         runData['NICols'] = list(mat['InputPairs'].dtype.names)
-        runData['VNavDataText'] = [str(x).strip() for x in mat['VNavDataText']]
+        runData['VNavDataText'] = [str(x).strip() for x in
+                                   mat['VNavDataText']]
 
     elif ext == '.h5':
         # open the file
@@ -1292,8 +1314,8 @@ def get_run_data(pathToFile):
         runData['NIData'] = runfile.root.NIData.read()
 
         # get the VN-100 data column names
-        # make the array into a list of python string and gets rid of unescaped
-        # control characters
+        # make the array into a list of python string and gets rid of
+        # unescaped control characters
         columns = [re.sub(r'[^ -~].*', '', str(x))
                    for x in runfile.root.VNavCols.read()]
         # gets rid of white space
@@ -1322,9 +1344,9 @@ def get_run_data(pathToFile):
 
     # redefine the VNData using parsing that accounts for the corrupt values
     # better
-    runData['VNavData'] = replace_corrupt_strings_with_nan(
-                           runData['VNavDataText'],
-                           runData['VNavCols'])
+    runData['VNavData'] = \
+        replace_corrupt_strings_with_nan(runData['VNavDataText'],
+                                         runData['VNavCols'])
 
     if 'Notes' not in runData['par'].keys():
         runData['par']['Notes'] = ''
@@ -1333,6 +1355,7 @@ def get_run_data(pathToFile):
         runData['par']['Notes'] = ''
 
     return runData
+
 
 def get_calib_data(pathToFile):
     """Returns calibration data from the run h5 files using pytables and
@@ -1394,6 +1417,7 @@ def get_calib_data(pathToFile):
 
     return calibData
 
+
 def pad_with_zeros(num, digits):
     '''
     Adds zeros to the front of a string needed to produce the number of
@@ -1418,6 +1442,7 @@ def pad_with_zeros(num, digits):
         num = '0' + num
 
     return num
+
 
 def list_files_in_dir(path):
     """Creates a list of mat or h5 files in a directory and sorts them by
