@@ -217,3 +217,11 @@ References
 
 .. [Moore2012] Moore, J. K. Human Control of a Bicycle. University of
    California, Davis. 2012.
+
+Release Notes
+=============
+
+0.1.0
+-----
+
+- Initial PyPi release.
