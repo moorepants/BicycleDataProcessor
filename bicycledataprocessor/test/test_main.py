@@ -179,5 +179,5 @@ def test_sync_error():
     # I feel like I should be able to set the value lower than zero, but I
     # don't seem to be getting perfect fits. I'm not sure why.
     assert signalprocessing.sync_error(tau, sig1, sig2, time) < 0.01
-    minTau = fmin(dp.sync_error, tau, args=(sig1, sig2, time))[0]
+    minTau = fmin(signalprocessing.sync_error, tau, args=(sig1, sig2, time))[0]
     assert minTau < tau + 1E-6
