@@ -16,4 +16,4 @@ before_install:
   - pip freeze
 install:
   - python setup.py install
-script: nosetests -v --with-coverage --cover-package=bicycleparameters
+script: nosetests -v --with-coverage --cover-package=bicycledataprocessor
