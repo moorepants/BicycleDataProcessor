@@ -18,7 +18,7 @@ import sys, os
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('..'))
 
-from bicycleparameters import __version__
+from bicycledataprocessor import __version__
 
 # -- General configuration -----------------------------------------------------
 
@@ -46,8 +46,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'DataProcessor'
-copyright = u'2011-2014, Jason Moore'
+project = u'BicycleDataProcessor'
+copyright = u'2011-2014, Jason K. Moore'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -170,7 +170,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'DataProcessordoc'
+htmlhelp_basename = 'BicycleDataProcessordoc'
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -184,8 +184,8 @@ htmlhelp_basename = 'DataProcessordoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'DataProcessor.tex', u'DataProcessor Documentation',
-   u'Jason Moore', 'manual'),
+  ('index', 'BicycleDataProcessor.tex', u'BicycleDataProcessor Documentation',
+   u'Jason K. Moore', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -217,6 +217,6 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'dataprocessor', u'DataProcessor Documentation',
-     [u'Jason Moore'], 1)
+    ('index', 'bicycledataprocessor', u'BicycleDataProcessor Documentation',
+     [u'Jason K. Moore'], 1)
 ]
