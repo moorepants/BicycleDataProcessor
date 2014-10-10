@@ -5,8 +5,9 @@ DataProcessor
 Description
 ===========
 
-This program is setup to process the raw data signals collected from the
-instrumented bicycle's data acquisition system (i.e. the output of BicycleDAQ_)
+This program is setup to process the raw data signals collected from the Davis
+Instrumented Bicycle's data acquisition system (i.e. the output of
+BicycleDAQ_). See [Moore2012]_ for details of the system and experiments.
 
 .. _BicycleDAQ: https://github.com/moorepants/BicycleDAQ
 
@@ -21,37 +22,38 @@ Citation
 ========
 
 If you make use of this data we kindly request that you cite our work, either
-[Moore2012]_, the data DOI, and/or other relevant references.
+[Moore2012]_, the software DOI, and/or other relevant references.
 
 Dependencies
 ============
 
-- `Python 2.7`__
-.. __: http://www.python.org
-- `Scipy >= 0.9.0`__
-.. __: http://www.scipy.org
-- `Numpy >= 1.6.1`__
-.. __: http://numpy.scipy.org
-- `Matplotlib >= 1.1.1`__
-.. __: http://matplotlib.sourceforge.net
-- `PyTables >= 2.1.2 and < 3.0.0`__
-.. __: http://www.pytables.org
-- `BicycleParameters >= 0.2.0`__
-.. __: http://pypi.python.org/pypi/BicycleParameters
-- `DynamicistToolKit >= 0.3.5`__
-.. __: https://github.com/moorepants/DynamicistToolKit
+- `Python 2.7`_
+- `NumPy >= 1.6.1`_
+- `SciPy >= 0.9.0`_
+- `Matplotlib >= 1.1.1`_
+- `PyTables >= 2.1.2 and < 3.0.0`_
+- `BicycleParameters >= 0.2.0`_
+- `DynamicistToolKit >= 0.3.4`_
+
+.. _Python 2.7: http://www.python.org
+.. _NumPy >= 1.6.1: http://numpy.scipy.org
+.. _SciPy >= 0.9.0: http://www.scipy.org
+.. _Matplotlib >= 1.1.1: http://matplotlib.sourceforge.net
+.. _PyTables >= 2.1.2 and < 3.0.0: http://www.pytables.org
+.. _BicycleParameters >= 0.2.0: http://pypi.python.org/pypi/BicycleParameters
+.. _DynamicistToolKit >= 0.3.4: https://pypi.python.org/pypi/DynamicistToolKit
 
 Installation
 ============
 
 For ease of setup we recommend setting up a conda_ environment::
 
-   $ conda create -n bdp numpy scipy matplotlib sympy pandas pyyaml "pytables<3.0"
+   $ conda create -n bdp numpy scipy matplotlib "pytables<3.0" pyyaml
    $ source activate bdp
 
 The remaining dependencies need to be installed with pip::
 
-   (bdp)$ pip install uncertainties "dynamicisttoolkit>=0.3.5"
+   (bdp)$ pip install "uncertainties>2.0.0" "DynamicistToolKit>=0.3.4"
    (bdp)$ pip install "yeadon>=1.1.1" "BicycleParameters>=0.2.0"
 
 And finally, this package::
@@ -66,8 +68,8 @@ Usage
 Load the prebuilt database file
 -------------------------------
 
-The simplest way to get started with the data is to download the latest
-database file from::
+The simplest way to get started with the data is to download the database file
+from::
 
    $ wget http://files.figshare.com/1710608/instrumented_bicycle_raw_data_h5.tar.bz2
    $ tar -jxvf instrumented_bicycle_raw_data_h5.tar.bz2
@@ -78,10 +80,11 @@ And also the bicycle parameter data::
    $ tar -zxvf bicycle_parameters.tar.gz
    $ rm bicycle_parameters.tar.gz
 
-In your working directory create a ``bdp-defaults.cfg`` and change
+In your working directory, create a ``bdp-defaults.cfg`` and change
 ``pathToDatabase`` and ``pathToParameters`` to point to the downloaded and
 unzipped database file and the ``bicycle-parameters`` data directory,
-respectively.
+respectively. See the ``example-bdp-defaults.cfg`` for reference. This file
+follows the standard Python configuration file format.
 
 Interact with the data
 ----------------------
@@ -150,7 +153,7 @@ Build the HDF5 file from raw data
 ---------------------------------
 
 The second option would be to build the database with the raw data from
-BicycleDAQ_. BicycleDAQ_ stores the raw data from trials and calibrations as
+BicycleDAQ_. BicycleDAQ stores the raw data from trials and calibrations as
 Matlab mat files. Then use this module to create the database and fill it with
 the data.
 
@@ -186,6 +189,8 @@ specified in ``bdp-defaults.cfg`` if you've done that).::
 Now, fill the database with the data.::
 
    >>> dataset.fill_all_tables()
+
+The will take a little time to populate the database.
 
 Warnings
 ========
