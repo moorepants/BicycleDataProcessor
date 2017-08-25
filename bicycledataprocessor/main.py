@@ -1182,10 +1182,14 @@ class Run():
             # Charlie and Luke rode the bike in the same configuration
             bicycle = 'Rigidcl'
         elif rider == 'Jason' :
+            # NOTE : The 'Rigid' bicycle is the Davis instrumented bicycle
+            # where the harness was configured for Jason.
             bicycle = 'Rigid'
-        else:
-            raise StandardError('There are no bicycle parameters ' +
-                    'for {}'.format(rider))
+        else:  # NOTE : Just use Jason's setup for any other random rider.
+            bicycle = 'Rigid'
+
+        msg = 'Rider {} placed on bicycle {}'
+        print(msg.format(rider, bicycle))
 
         # force a recalculation (but not the period calcs, they take too long)
         self.bicycle = bp.Bicycle(bicycle, pathToData=pathToParameterData)
