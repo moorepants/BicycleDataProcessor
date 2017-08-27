@@ -213,16 +213,17 @@ class Signal(np.ndarray):
         grated.name = self.name + 'Int'
         return grated
 
-    def plot(self, show=True):
+    def plot(self, ax=None):
         """Plots and returns the signal versus time."""
+        if ax is None:
+            fig, ax = plt.subplots(1)
         time = self.time()
-        line = plt.plot(time, self)
-        if show:
-            plt.xlabel('Time [second]')
-            plt.ylabel('{0} [{1}]'.format(self.name, self.units))
-            plt.title('Signal plot during run {0}'.format(self.runid))
-            plt.show()
-        return line
+        ax.plot(time, self)
+
+        ax.set_xlabel('Time [second]')
+        ax.set_ylabel('{0} [{1}]'.format(self.name, self.units))
+        ax.set_title('Signal plot during run {0}'.format(self.runid))
+        return ax
 
     def spline(self):
         """Returns the signal with nans replaced by the results of a cubic
@@ -1271,7 +1272,7 @@ class Run():
 
         return fig
 
-    def plot_wheel_contact(self, aspect='auto'):
+    def plot_wheel_contact(self, aspect='auto', ax=None):
         """Returns a plot of the wheel contact traces.
 
         Parameters
@@ -1290,8 +1291,10 @@ class Run():
         q9 = self.taskSignals['LongitudinalFrontContact']
         q10 = self.taskSignals['LateralFrontContact']
 
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1, aspect=aspect)
+        if ax is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(1, 1, 1, aspect=aspect)
+
         ax.plot(q1, q2, q9, q10)
         ax.set_xlabel('Distance [' + q1.units + ']')
         ax.set_ylabel('Distance [' + q2.units + ']')
