@@ -1,12 +1,5 @@
 #!/usr/bin/env python
 
-#try:
-    #from IPython.core.debugger import Tracer
-#except ImportError:
-    #pass
-#else:
-    #set_trace = Tracer()
-
 from warnings import warn
 
 # dependencies
@@ -19,7 +12,6 @@ from dtk.process import time_vector, butterworth, normalize, subtract_mean
 
 # local dependencies
 from bdpexceptions import TimeShiftError
-#from signalprocessing import *
 
 def find_bump(accelSignal, sampleRate, speed, wheelbase, bumpLength):
     '''Returns the indices that surround the bump in the acceleration signal.
@@ -141,7 +133,9 @@ def split_around_nan(sig):
     return indices, arrays
 
 def steer_rate(forkRate, angularRateZ):
-    '''Returns the steer rate.
+    '''Returns the steer rate given the body fixed angular rate of the front
+    frame about the steering axis and the body fixed angular rate of the rear
+    frame about the steer axis.
 
     Parameters
     ----------
