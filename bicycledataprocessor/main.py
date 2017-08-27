@@ -1271,17 +1271,17 @@ class Run():
 
         return fig
 
-    def plot_wheel_contact(self, show=False):
+    def plot_wheel_contact(self, aspect='auto'):
         """Returns a plot of the wheel contact traces.
 
         Parameters
         ----------
-        show : boolean
-            If true the plot will be displayed.
+        aspect_equal : string
+            A valid matplotlib aspect ratio value.
 
         Returns
         -------
-        fig : matplotlib.Figure
+        ax : matplotlib.Axes
 
         """
 
@@ -1291,21 +1291,18 @@ class Run():
         q10 = self.taskSignals['LateralFrontContact']
 
         fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
+        ax = fig.add_subplot(1, 1, 1, aspect=aspect)
         ax.plot(q1, q2, q9, q10)
         ax.set_xlabel('Distance [' + q1.units + ']')
         ax.set_ylabel('Distance [' + q2.units + ']')
-        ax.set_ylim((-0.5, 0.5))
+        ax.legend(['Rear Wheel', 'Front Wheel'])
         rider = self.metadata['Rider']
         where = self.metadata['Environment']
         speed = '%1.2f' % self.taskSignals['ForwardSpeed'].mean()
         maneuver = self.metadata['Maneuver']
         ax.set_title(rider + ', ' + where + ', ' + maneuver + ' @ ' + speed + ' m/s')
 
-        if show is True:
-            fig.show()
-
-        return fig
+        return ax
 
     def verify_time_sync(self, show=True, saveDir=None):
         """Shows a plot of the acceleration signals that were used to
