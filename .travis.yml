@@ -16,9 +16,9 @@ before_install:
   - conda config --add channels conda-forge
   - conda update -q conda
   - conda info -a
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION setuptools pip numpy scipy matplotlib pyyaml pytables nose coverage dynamicisttoolkit uncertainties yeadon
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION setuptools pip numpy scipy matplotlib pyyaml pytables nose coverage dynamicisttoolkit uncertainties
   - source activate test-environment
-  - conda uninstall mayavi
+  - pip install yeadon
   - pip install BicycleParameters
 install:
   - python setup.py install
