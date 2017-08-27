@@ -21,8 +21,9 @@ License
 Citation
 ========
 
-If you make use of this data we kindly request that you cite our work, either
-[Moore2012]_, the software DOI, and/or other relevant references.
+If you make use of this software or data we kindly request that you cite our
+work, either [Moore2012]_, the software DOI, the data DOI, and/or other
+relevant references.
 
 Dependencies
 ============
